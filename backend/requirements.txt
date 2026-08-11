@@ -9,3 +9,8 @@ psycopg[binary]>=3.2
 pgvector>=0.3.6
 alembic>=1.14
 redis>=5.2
+
+# --- Authentication ---
+PyJWT>=2.10
+argon2-cffi>=23.1
+email-validator>=2.2

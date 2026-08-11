@@ -9,11 +9,14 @@ from enum import StrEnum
 
 
 class UserRole(StrEnum):
-    """Coarse-grained role attached to a user account."""
+    """Coarse-grained role attached to a user account.
+
+    The three roles are ordered: an ADMIN can do anything an ANALYST can, and an
+    ANALYST anything a VIEWER can. See ``app.core.authz`` for the ranking.
+    """
 
     ADMIN = "admin"
     ANALYST = "analyst"
-    RESPONDER = "responder"
     VIEWER = "viewer"
 
 

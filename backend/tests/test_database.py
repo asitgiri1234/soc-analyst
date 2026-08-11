@@ -56,7 +56,7 @@ async def session() -> AsyncGenerator[AsyncSession, None]:
 
 async def _user(session: AsyncSession, *, username: str = "analyst") -> User:
     user = User(
-        email=f"{username}@soc.test",
+        email=f"{username}@soc.example.com",
         username=username,
         hashed_password="not-a-real-hash",
     )
@@ -87,7 +87,8 @@ async def test_server_defaults_populate_on_insert(session: AsyncSession) -> None
     user = await _user(session)
 
     assert user.id is not None
-    assert user.role == "analyst"
+    # Least privilege: a row written without an explicit role gets the lowest.
+    assert user.role == "viewer"
     assert user.is_active is True
     assert user.is_superuser is False
     assert user.preferences == {}
@@ -294,5 +295,5 @@ async def test_audit_log_keeps_the_actor_email_after_deletion(session: AsyncSess
     await session.refresh(record)
 
     assert record.actor_id is None
-    assert record.actor_email == "responder@soc.test"
+    assert record.actor_email == "responder@soc.example.com"
     assert record.changes["status"]["to"] == "contained"

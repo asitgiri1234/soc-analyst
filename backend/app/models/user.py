@@ -35,11 +35,12 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     full_name: Mapped[str | None] = mapped_column(String(255))
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
 
+    # Least privilege by default: an account gains rights only when granted them.
     role: Mapped[UserRole] = mapped_column(
         pg_enum(UserRole, "user_role"),
         nullable=False,
-        default=UserRole.ANALYST,
-        server_default=UserRole.ANALYST.value,
+        default=UserRole.VIEWER,
+        server_default=UserRole.VIEWER.value,
         index=True,
     )
     is_active: Mapped[bool] = mapped_column(

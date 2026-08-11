@@ -1,10 +1,15 @@
 """Application configuration loaded from environment variables."""
 
 from functools import lru_cache
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Self
 
-from pydantic import Field, PostgresDsn, RedisDsn, field_validator
+from pydantic import Field, PostgresDsn, RedisDsn, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+# Placeholder shipped in .env.example. Refused outside local development so a
+# deployment can never sign tokens with a publicly known key.
+INSECURE_SECRET_KEY = "change-me-generate-with-openssl-rand-hex-32"
+MIN_SECRET_KEY_LENGTH = 32
 
 
 class Settings(BaseSettings):
@@ -42,6 +47,37 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             return [origin.strip() for origin in value.split(",") if origin.strip()]
         return value
+
+    # --- Authentication --------------------------------------------------
+    # Signing key for access tokens. Override in every deployed environment.
+    SECRET_KEY: str = INSECURE_SECRET_KEY
+    JWT_ALGORITHM: Literal["HS256", "HS384", "HS512"] = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30, ge=1, le=1440)
+    JWT_ISSUER: str = "soc-analyst"
+
+    # Logout revokes a token by storing its jti in Redis until it would have
+    # expired. Disable only if Redis is unavailable and audit-only logout is
+    # acceptable -- tokens then remain valid until they expire on their own.
+    AUTH_TOKEN_DENYLIST_ENABLED: bool = True
+
+    # Rejected at registration; also the floor for any password change.
+    MIN_PASSWORD_LENGTH: int = Field(default=12, ge=8)
+
+    @model_validator(mode="after")
+    def _reject_insecure_secret_key(self) -> Self:
+        if self.ENVIRONMENT == "local":
+            return self
+        if self.SECRET_KEY == INSECURE_SECRET_KEY:
+            raise ValueError(
+                f"SECRET_KEY must be set to a generated value when ENVIRONMENT="
+                f"{self.ENVIRONMENT!r}. Generate one with: openssl rand -hex 32"
+            )
+        if len(self.SECRET_KEY) < MIN_SECRET_KEY_LENGTH:
+            raise ValueError(
+                f"SECRET_KEY must be at least {MIN_SECRET_KEY_LENGTH} characters "
+                f"when ENVIRONMENT={self.ENVIRONMENT!r}."
+            )
+        return self
 
     # --- PostgreSQL / pgvector ------------------------------------------
     POSTGRES_HOST: str = "localhost"
