@@ -1,7 +1,8 @@
 """Declarative base for ORM models.
 
-Models are added in later phases; this module only fixes the naming
-convention so that future Alembic migrations produce stable constraint names.
+The naming convention keeps constraint and index names stable across Alembic
+autogenerations. Models live in ``app.models``; import that package (not this
+module) when you need them all registered on the metadata.
 """
 
 from sqlalchemy import MetaData
