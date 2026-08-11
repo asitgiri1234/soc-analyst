@@ -7,7 +7,6 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Index, Integer, String, Text
-from sqlalchemy.dialects.postgresql import INET
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -19,9 +18,11 @@ from app.models.mixins import (
     json_object,
     pg_enum,
 )
+from app.models.types import INETStr
 
 if TYPE_CHECKING:
     from app.models.anomaly import Anomaly
+    from app.models.ingestion_job import IngestionJob
     from app.models.log_entry import LogEntry
     from app.models.user import User
 
@@ -48,7 +49,7 @@ class LogSource(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     vendor: Mapped[str | None] = mapped_column(String(128))
     hostname: Mapped[str | None] = mapped_column(String(255), index=True)
-    ip_address: Mapped[str | None] = mapped_column(INET)
+    ip_address: Mapped[str | None] = mapped_column(INETStr)
     timezone: Mapped[str] = mapped_column(
         String(64), nullable=False, default="UTC", server_default="UTC"
     )
@@ -83,6 +84,11 @@ class LogSource(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     anomalies: Mapped[list[Anomaly]] = relationship(
         back_populates="log_source", passive_deletes=True
+    )
+    ingestion_jobs: Mapped[list[IngestionJob]] = relationship(
+        back_populates="log_source",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
 
     def __repr__(self) -> str:

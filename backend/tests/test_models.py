@@ -44,6 +44,7 @@ def test_all_models_are_registered() -> None:
         "incident_reports",
         "security_documents",
         "audit_logs",
+        "ingestion_jobs",
     }
     assert expected == set(Base.metadata.tables)
 

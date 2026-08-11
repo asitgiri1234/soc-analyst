@@ -1,0 +1,102 @@
+{
+  "source": "identity-provider",
+  "exported_at": "2026-08-10T11:00:00Z",
+  "events": [
+    {
+      "timestamp": "2026-08-10T10:02:11Z",
+      "event_type": "auth.login_failed",
+      "severity": "warning",
+      "user": "j.okafor",
+      "source_ip": "203.0.113.91",
+      "destination_ip": "10.20.5.10",
+      "host": "sso-01",
+      "outcome": "failure",
+      "message": "Password authentication failed for j.okafor",
+      "metadata": {"attempt": 1, "method": "password", "user_agent": "Mozilla/5.0"}
+    },
+    {
+      "timestamp": "2026-08-10T10:02:19Z",
+      "event_type": "auth.login_failed",
+      "severity": "warning",
+      "user": "j.okafor",
+      "source_ip": "203.0.113.91",
+      "destination_ip": "10.20.5.10",
+      "host": "sso-01",
+      "outcome": "failure",
+      "message": "Password authentication failed for j.okafor",
+      "metadata": {"attempt": 2, "method": "password", "user_agent": "Mozilla/5.0"}
+    },
+    {
+      "timestamp": "2026-08-10T10:02:27Z",
+      "event_type": "auth.login_failed",
+      "severity": "error",
+      "user": "j.okafor",
+      "source_ip": "203.0.113.91",
+      "destination_ip": "10.20.5.10",
+      "host": "sso-01",
+      "outcome": "failure",
+      "message": "Password authentication failed for j.okafor",
+      "metadata": {"attempt": 3, "method": "password", "user_agent": "Mozilla/5.0"}
+    },
+    {
+      "timestamp": "2026-08-10T10:02:35Z",
+      "event_type": "auth.account_locked",
+      "severity": "critical",
+      "user": "j.okafor",
+      "source_ip": "203.0.113.91",
+      "destination_ip": "10.20.5.10",
+      "host": "sso-01",
+      "outcome": "failure",
+      "message": "Account j.okafor locked after 3 consecutive failed attempts",
+      "metadata": {"lockout_minutes": 30, "policy": "standard-lockout"}
+    },
+    {
+      "timestamp": "2026-08-10T10:07:44Z",
+      "event_type": "auth.login_succeeded",
+      "severity": "info",
+      "user": "a.novak",
+      "source_ip": "10.20.4.61",
+      "destination_ip": "10.20.5.10",
+      "host": "sso-01",
+      "outcome": "success",
+      "message": "Interactive login succeeded for a.novak",
+      "metadata": {"method": "mfa_push", "device_trusted": true}
+    },
+    {
+      "timestamp": "2026-08-10T10:15:02Z",
+      "event_type": "auth.privilege_escalation",
+      "severity": "high",
+      "user": "a.novak",
+      "source_ip": "10.20.4.61",
+      "destination_ip": "10.20.5.44",
+      "host": "jump-01",
+      "outcome": "success",
+      "message": "User a.novak elevated to administrators group on jump-01",
+      "metadata": {"granted_by": "s.pereira", "ticket": "CHG-4821"}
+    },
+    {
+      "timestamp": "2026-08-10T10:31:58Z",
+      "event_type": "auth.login_succeeded",
+      "severity": "info",
+      "user": "svc_backup",
+      "source_ip": "10.20.6.5",
+      "destination_ip": "10.20.5.10",
+      "host": "sso-01",
+      "outcome": "success",
+      "message": "Service account svc_backup authenticated",
+      "metadata": {"method": "certificate", "scheduled": true}
+    },
+    {
+      "timestamp": "2026-08-10T10:48:13Z",
+      "event_type": "auth.impossible_travel",
+      "severity": "critical",
+      "user": "j.okafor",
+      "source_ip": "198.51.100.240",
+      "destination_ip": "10.20.5.10",
+      "host": "sso-01",
+      "outcome": "failure",
+      "message": "Login attempt from a location inconsistent with the prior session",
+      "metadata": {"previous_country": "PT", "current_country": "SG", "minutes_elapsed": 46}
+    }
+  ]
+}

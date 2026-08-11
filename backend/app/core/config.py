@@ -79,6 +79,17 @@ class Settings(BaseSettings):
             )
         return self
 
+    # --- Log ingestion ---------------------------------------------------
+    # Uploads are read fully into memory before parsing, so this bound is also
+    # what stops one request from exhausting the process.
+    MAX_UPLOAD_BYTES: int = Field(default=10 * 1024 * 1024, ge=1024)
+    # Rows per INSERT. Large enough to amortise round trips, small enough that a
+    # single statement stays well inside PostgreSQL's parameter limit.
+    INGEST_BATCH_SIZE: int = Field(default=500, ge=1, le=5000)
+    # Per-row failures kept on the job record. A file of entirely bad rows must
+    # not write an unbounded JSON column.
+    INGEST_MAX_REPORTED_ERRORS: int = Field(default=100, ge=1, le=1000)
+
     # --- PostgreSQL / pgvector ------------------------------------------
     POSTGRES_HOST: str = "localhost"
     POSTGRES_PORT: int = 5432

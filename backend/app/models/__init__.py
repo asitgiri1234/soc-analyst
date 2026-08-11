@@ -14,6 +14,8 @@ from app.models.enums import (
     DocumentType,
     IncidentPriority,
     IncidentStatus,
+    IngestionFormat,
+    IngestionStatus,
     LogSourceStatus,
     LogSourceType,
     ReportFormat,
@@ -23,6 +25,7 @@ from app.models.enums import (
 )
 from app.models.incident import Incident
 from app.models.incident_report import IncidentReport
+from app.models.ingestion_job import IngestionJob
 from app.models.log_entry import LogEntry
 from app.models.log_source import LogSource
 from app.models.security_document import SecurityDocument
@@ -34,6 +37,7 @@ __all__ = [
     "AuditLog",
     "Incident",
     "IncidentReport",
+    "IngestionJob",
     "LogEntry",
     "LogSource",
     "SecurityDocument",
@@ -45,6 +49,8 @@ __all__ = [
     "DocumentType",
     "IncidentPriority",
     "IncidentStatus",
+    "IngestionFormat",
+    "IngestionStatus",
     "LogSourceStatus",
     "LogSourceType",
     "ReportFormat",

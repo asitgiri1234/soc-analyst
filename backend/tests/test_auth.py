@@ -379,8 +379,20 @@ async def test_logout_requires_authentication(client: httpx.AsyncClient) -> None
 # --- Audit trail -----------------------------------------------------------
 
 
-async def _actions(session: AsyncSession) -> list[AuditLog]:
-    result = await session.execute(select(AuditLog).order_by(AuditLog.created_at))
+async def _actions(
+    session: AsyncSession, action: AuditAction, *, email: str
+) -> list[AuditLog]:
+    """Audit entries for one action by one address.
+
+    Scoped to the address under test rather than reading the whole table: the
+    audit trail is append-only and shared, so a global count would depend on
+    whatever else the database happens to hold.
+    """
+    result = await session.execute(
+        select(AuditLog)
+        .where(AuditLog.action == action, AuditLog.actor_email == email.lower())
+        .order_by(AuditLog.created_at)
+    )
     return list(result.scalars())
 
 
@@ -391,7 +403,7 @@ async def test_successful_login_is_audited(
 
     await client.post("/api/v1/auth/login", json={"email": user.email, "password": password})
 
-    entries = [e for e in await _actions(session) if e.action == AuditAction.LOGIN]
+    entries = await _actions(session, AuditAction.LOGIN, email=user.email)
     assert len(entries) == 1
     assert entries[0].actor_id == user.id
     assert entries[0].success is True
@@ -406,7 +418,7 @@ async def test_failed_login_is_audited(
         "/api/v1/auth/login", json={"email": user.email, "password": "wrong-password-99"}
     )
 
-    entries = [e for e in await _actions(session) if e.action == AuditAction.LOGIN_FAILED]
+    entries = await _actions(session, AuditAction.LOGIN_FAILED, email=user.email)
     assert len(entries) == 1
     assert entries[0].success is False
     assert entries[0].actor_email == user.email
@@ -422,7 +434,9 @@ async def test_login_attempt_on_unknown_email_is_audited(
         "/api/v1/auth/login", json={"email": "ghost@soc.example.com", "password": password}
     )
 
-    entries = [e for e in await _actions(session) if e.action == AuditAction.LOGIN_FAILED]
+    entries = await _actions(
+        session, AuditAction.LOGIN_FAILED, email="ghost@soc.example.com"
+    )
     assert len(entries) == 1
     assert entries[0].actor_id is None
     assert entries[0].actor_email == "ghost@soc.example.com"
@@ -435,6 +449,6 @@ async def test_logout_is_audited(
 
     await client.post("/api/v1/auth/logout", headers=auth_header(user))
 
-    entries = [e for e in await _actions(session) if e.action == AuditAction.LOGOUT]
+    entries = await _actions(session, AuditAction.LOGOUT, email=user.email)
     assert len(entries) == 1
     assert entries[0].actor_id == user.id

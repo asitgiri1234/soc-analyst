@@ -8,13 +8,13 @@ from typing import TYPE_CHECKING, Any
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, func
-from sqlalchemy.dialects.postgresql import INET
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.config import settings
 from app.db.base import Base
 from app.models.enums import Severity
 from app.models.mixins import CreatedAtMixin, UUIDPrimaryKeyMixin, json_object, pg_enum
+from app.models.types import INETStr
 
 if TYPE_CHECKING:
     from app.models.anomaly import Anomaly
@@ -69,9 +69,9 @@ class LogEntry(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     host: Mapped[str | None] = mapped_column(String(255), index=True)
     process: Mapped[str | None] = mapped_column(String(255))
     username: Mapped[str | None] = mapped_column(String(255))
-    source_ip: Mapped[str | None] = mapped_column(INET)
+    source_ip: Mapped[str | None] = mapped_column(INETStr)
     source_port: Mapped[int | None] = mapped_column(Integer)
-    destination_ip: Mapped[str | None] = mapped_column(INET)
+    destination_ip: Mapped[str | None] = mapped_column(INETStr)
     destination_port: Mapped[int | None] = mapped_column(Integer)
     protocol: Mapped[str | None] = mapped_column(String(16))
 

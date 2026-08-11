@@ -1,0 +1,13 @@
+timestamp,src_ip,dst_ip,src_port,dst_port,protocol,action,severity,event_type,device,message
+2026-08-10T09:14:22Z,203.0.113.47,10.20.3.15,54221,22,TCP,deny,warning,firewall.connection_blocked,edge-fw-01,Inbound SSH from external address blocked by policy WAN-IN
+2026-08-10T09:14:25Z,203.0.113.47,10.20.3.15,54223,22,TCP,deny,warning,firewall.connection_blocked,edge-fw-01,Inbound SSH from external address blocked by policy WAN-IN
+2026-08-10T09:14:31Z,203.0.113.47,10.20.3.16,54240,22,TCP,deny,warning,firewall.connection_blocked,edge-fw-01,Inbound SSH from external address blocked by policy WAN-IN
+2026-08-10T09:15:02Z,203.0.113.47,10.20.3.15,54301,3389,TCP,deny,error,firewall.connection_blocked,edge-fw-01,Inbound RDP from external address blocked by policy WAN-IN
+2026-08-10T09:16:44Z,10.20.4.88,198.51.100.23,49812,443,TCP,allow,info,firewall.connection_allowed,edge-fw-01,Outbound HTTPS session established
+2026-08-10T09:18:03Z,10.20.4.91,198.51.100.77,50120,8443,TCP,allow,info,firewall.connection_allowed,edge-fw-01,Outbound HTTPS session established
+2026-08-10T09:21:17Z,10.20.4.203,185.220.101.34,51044,9001,TCP,deny,critical,firewall.threat_blocked,edge-fw-01,Outbound connection to known Tor entry node blocked
+2026-08-10T09:23:55Z,192.0.2.180,10.20.3.15,40122,445,TCP,deny,error,firewall.connection_blocked,edge-fw-02,SMB connection attempt from untrusted network blocked
+2026-08-10T09:24:08Z,192.0.2.180,10.20.3.15,40128,139,TCP,deny,error,firewall.connection_blocked,edge-fw-02,NetBIOS session request from untrusted network blocked
+2026-08-10T09:31:40Z,10.20.4.88,203.0.113.200,49900,53,UDP,allow,info,firewall.dns_query,edge-fw-01,DNS query forwarded to upstream resolver
+2026-08-10T09:33:12Z,198.51.100.14,10.20.3.22,33012,80,TCP,deny,warning,firewall.connection_blocked,edge-fw-02,HTTP request to decommissioned host blocked
+2026-08-10T09:41:29Z,10.20.4.150,185.220.101.34,52210,443,TCP,deny,critical,firewall.threat_blocked,edge-fw-01,Outbound connection to flagged infrastructure blocked

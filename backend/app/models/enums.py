@@ -130,6 +130,28 @@ class DocumentType(StrEnum):
     OTHER = "other"
 
 
+class IngestionFormat(StrEnum):
+    """Wire format of an uploaded log file."""
+
+    CSV = "csv"
+    JSON = "json"
+    NDJSON = "ndjson"
+
+
+class IngestionStatus(StrEnum):
+    """Outcome of an upload.
+
+    PARTIAL is the common case for real log files: some records are malformed,
+    and the rest are still worth keeping.
+    """
+
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    PARTIAL = "partial"
+    FAILED = "failed"
+
+
 class AuditAction(StrEnum):
     """Auditable operation recorded against a resource."""
 

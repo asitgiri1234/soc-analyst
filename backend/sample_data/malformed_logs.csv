@@ -1,0 +1,8 @@
+timestamp,src_ip,dst_ip,event_type,severity,message
+2026-08-10T14:00:00Z,203.0.113.10,10.20.3.15,ids.signature_match,high,Signature match on inbound traffic
+not-a-timestamp,203.0.113.11,10.20.3.15,ids.signature_match,high,Row rejected: the timestamp cannot be parsed
+,203.0.113.12,10.20.3.15,ids.signature_match,high,Row rejected: the timestamp is missing
+2026-08-10T14:03:00Z,999.999.999.999,10.20.3.15,ids.signature_match,medium,Row kept: the invalid address is moved into attributes
+2026-08-10T14:04:00Z,203.0.113.14,10.20.3.15,ids.signature_match,low,Signature match on inbound traffic
+2026-08-10T14:05:00Z,203.0.113.15,10.20.3.15,ids.signature_match,low,Row rejected: too many columns,extra-value
+2026-08-10T14:06:00Z,203.0.113.16,10.20.3.15,ids.port_scan,critical,Horizontal port scan detected across 40 hosts

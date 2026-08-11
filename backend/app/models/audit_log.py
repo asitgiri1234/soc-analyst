@@ -6,12 +6,13 @@ import uuid
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import Boolean, ForeignKey, Index, String, Text
-from sqlalchemy.dialects.postgresql import INET, UUID
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 from app.models.enums import AuditAction
 from app.models.mixins import CreatedAtMixin, UUIDPrimaryKeyMixin, json_object, pg_enum
+from app.models.types import INETStr
 
 if TYPE_CHECKING:
     from app.models.user import User
@@ -48,7 +49,7 @@ class AuditLog(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     changes: Mapped[dict[str, Any]] = json_object()
     context: Mapped[dict[str, Any]] = json_object()
 
-    ip_address: Mapped[str | None] = mapped_column(INET)
+    ip_address: Mapped[str | None] = mapped_column(INETStr)
     user_agent: Mapped[str | None] = mapped_column(String(512))
     request_id: Mapped[str | None] = mapped_column(String(64), index=True)
 
