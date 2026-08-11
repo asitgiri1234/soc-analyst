@@ -1,0 +1,48 @@
+# --- Environment ---
+.env
+.env.*
+!.env.example
+*.local
+
+# --- Node / Next.js ---
+node_modules/
+.next/
+out/
+build/
+dist/
+.npm/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+next-env.d.ts
+.vercel
+*.tsbuildinfo
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+*.egg-info/
+.eggs/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# --- Editors / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Logs & local data ---
+logs/
+*.log
+data/
+tmp/
