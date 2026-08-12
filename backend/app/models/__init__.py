@@ -10,6 +10,7 @@ from app.models.audit_log import AuditLog
 from app.models.enums import (
     AnomalyStatus,
     AnomalyType,
+    AttackType,
     AuditAction,
     DocumentType,
     IncidentPriority,
@@ -24,6 +25,7 @@ from app.models.enums import (
     UserRole,
 )
 from app.models.incident import Incident
+from app.models.incident_note import IncidentNote
 from app.models.incident_report import IncidentReport
 from app.models.ingestion_job import IngestionJob
 from app.models.log_entry import LogEntry
@@ -36,6 +38,7 @@ __all__ = [
     "Anomaly",
     "AuditLog",
     "Incident",
+    "IncidentNote",
     "IncidentReport",
     "IngestionJob",
     "LogEntry",
@@ -45,6 +48,7 @@ __all__ = [
     # Enums
     "AnomalyStatus",
     "AnomalyType",
+    "AttackType",
     "AuditAction",
     "DocumentType",
     "IncidentPriority",

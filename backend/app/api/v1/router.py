@@ -10,6 +10,7 @@ from app.api.v1.endpoints import (
     auth,
     detection,
     health,
+    incidents,
     ingestion_jobs,
     log_sources,
     protected,
@@ -23,4 +24,5 @@ api_router.include_router(users.router)
 api_router.include_router(log_sources.router)
 api_router.include_router(ingestion_jobs.router)
 api_router.include_router(detection.router)
+api_router.include_router(incidents.router)
 api_router.include_router(protected.router)

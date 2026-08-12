@@ -19,7 +19,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
-from app.models.enums import IncidentPriority, IncidentStatus, Severity
+from app.models.enums import AttackType, IncidentPriority, IncidentStatus, Severity
 from app.models.mixins import (
     TimestampMixin,
     UUIDPrimaryKeyMixin,
@@ -30,6 +30,7 @@ from app.models.mixins import (
 
 if TYPE_CHECKING:
     from app.models.anomaly import Anomaly
+    from app.models.incident_note import IncidentNote
     from app.models.incident_report import IncidentReport
     from app.models.user import User
 
@@ -45,6 +46,7 @@ class Incident(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __table_args__ = (
         Index("ix_incidents_status_severity", "status", "severity"),
         Index("ix_incidents_assigned_status", "assigned_to_id", "status"),
+        Index("ix_incidents_attack_type_status", "attack_type", "status"),
     )
 
     number: Mapped[int] = mapped_column(
@@ -54,7 +56,13 @@ class Incident(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     summary: Mapped[str | None] = mapped_column(Text)
     description: Mapped[str | None] = mapped_column(Text)
-    category: Mapped[str | None] = mapped_column(String(64), index=True)
+    attack_type: Mapped[AttackType] = mapped_column(
+        pg_enum(AttackType, "attack_type"),
+        nullable=False,
+        default=AttackType.UNKNOWN,
+        server_default=AttackType.UNKNOWN.value,
+        index=True,
+    )
 
     severity: Mapped[Severity] = mapped_column(
         pg_enum(Severity, "severity"),
@@ -82,15 +90,14 @@ class Incident(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ForeignKey("users.id", ondelete="SET NULL"), index=True
     )
 
-    # Response timeline. Each stage stamps its own column so dwell time between
-    # phases (detect -> contain -> close) can be reported on directly.
+    # Response timeline. One column per state transition, so dwell time between
+    # stages (detected -> acknowledged -> resolved) can be reported on directly
+    # rather than reconstructed from the audit trail.
     detected_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), index=True
     )
     acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    contained_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     sla_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     affected_assets: Mapped[list[dict[str, Any]]] = json_array()
@@ -114,6 +121,12 @@ class Incident(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
         order_by="IncidentReport.version",
+    )
+    notes: Mapped[list[IncidentNote]] = relationship(
+        back_populates="incident",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="IncidentNote.created_at",
     )
 
     @property

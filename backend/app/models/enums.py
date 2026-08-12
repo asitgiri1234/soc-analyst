@@ -78,15 +78,42 @@ class AnomalyStatus(StrEnum):
 
 
 class IncidentStatus(StrEnum):
-    """Incident lifecycle, loosely following the NIST 800-61 phases."""
+    """Incident lifecycle.
+
+    Three states, and they are ordered: an incident is raised OPEN, worked
+    INVESTIGATING, and finished RESOLVED. Reopening a resolved incident is
+    allowed -- an investigation closed too early is a normal event -- and clears
+    the resolution timestamp.
+    """
 
     OPEN = "open"
-    TRIAGED = "triaged"
     INVESTIGATING = "investigating"
-    CONTAINED = "contained"
-    ERADICATED = "eradicated"
-    RECOVERED = "recovered"
-    CLOSED = "closed"
+    RESOLVED = "resolved"
+
+
+class AttackType(StrEnum):
+    """What an incident is an instance of.
+
+    An enum rather than free text so incidents can be counted by attack type
+    without normalising a dozen spellings of "brute force" first. OTHER is the
+    escape hatch; a value that keeps appearing there is a prompt to add one.
+    """
+
+    BRUTE_FORCE = "brute_force"
+    CREDENTIAL_ACCESS = "credential_access"
+    PRIVILEGE_ESCALATION = "privilege_escalation"
+    LATERAL_MOVEMENT = "lateral_movement"
+    MALWARE = "malware"
+    RANSOMWARE = "ransomware"
+    PHISHING = "phishing"
+    DATA_EXFILTRATION = "data_exfiltration"
+    DENIAL_OF_SERVICE = "denial_of_service"
+    RECONNAISSANCE = "reconnaissance"
+    INSIDER_THREAT = "insider_threat"
+    POLICY_VIOLATION = "policy_violation"
+    MISCONFIGURATION = "misconfiguration"
+    UNKNOWN = "unknown"
+    OTHER = "other"
 
 
 class IncidentPriority(StrEnum):
