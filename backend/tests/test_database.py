@@ -167,7 +167,13 @@ async def test_deleting_a_source_cascades_to_its_entries(session: AsyncSession) 
     await session.delete(source)
     await session.flush()
 
-    remaining = await session.execute(select(func.count()).select_from(LogEntry.__table__))
+    # Scoped to this source: the table is shared, so a global count would depend
+    # on whatever else the database happens to hold.
+    remaining = await session.execute(
+        select(func.count())
+        .select_from(LogEntry.__table__)
+        .where(LogEntry.__table__.c.log_source_id == source.id)
+    )
     assert remaining.scalar_one() == 0
 
 

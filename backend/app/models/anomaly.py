@@ -92,6 +92,13 @@ class Anomaly(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     detector: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     detector_version: Mapped[str | None] = mapped_column(String(32))
 
+    # Identity of the finding: which detector, about what, in which window --
+    # deliberately not the score. Re-analysing an overlapping window recognises
+    # what it already stored instead of duplicating it. Nullable and unique, so
+    # anomalies raised by hand are unaffected (PostgreSQL allows repeated NULLs
+    # in a unique index).
+    fingerprint: Mapped[str | None] = mapped_column(String(64), unique=True)
+
     detected_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), index=True
     )

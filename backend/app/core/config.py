@@ -90,6 +90,12 @@ class Settings(BaseSettings):
     # not write an unbounded JSON column.
     INGEST_MAX_REPORTED_ERRORS: int = Field(default=100, ge=1, le=1000)
 
+    # --- Anomaly detection -----------------------------------------------
+    # Default span analysed when a request does not give one.
+    DETECTION_WINDOW_HOURS: int = Field(default=24, ge=1, le=720)
+    # Detectors hold their input in memory, so the window has to be bounded.
+    DETECTION_MAX_ENTRIES: int = Field(default=50_000, ge=100, le=1_000_000)
+
     # --- PostgreSQL / pgvector ------------------------------------------
     POSTGRES_HOST: str = "localhost"
     POSTGRES_PORT: int = 5432
