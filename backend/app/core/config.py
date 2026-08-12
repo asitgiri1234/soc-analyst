@@ -3,7 +3,14 @@
 from functools import lru_cache
 from typing import Annotated, Literal, Self
 
-from pydantic import Field, PostgresDsn, RedisDsn, field_validator, model_validator
+from pydantic import (
+    Field,
+    PostgresDsn,
+    RedisDsn,
+    SecretStr,
+    field_validator,
+    model_validator,
+)
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 # Placeholder shipped in .env.example. Refused outside local development so a
@@ -89,6 +96,39 @@ class Settings(BaseSettings):
     # Per-row failures kept on the job record. A file of entirely bad rows must
     # not write an unbounded JSON column.
     INGEST_MAX_REPORTED_ERRORS: int = Field(default=100, ge=1, le=1000)
+
+    # --- AI incident analysis --------------------------------------------
+    # The provider is selected here so it can be swapped without touching the
+    # analyzer. "groq" is the shipped integration.
+    LLM_PROVIDER: Literal["groq"] = "groq"
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"
+    # SecretStr, so the key is masked in tracebacks, logging of the settings
+    # object, and anything that reprs configuration. Reading it requires an
+    # explicit .get_secret_value(), which is easy to audit for.
+    GROQ_API_KEY: SecretStr | None = None
+    LLM_TIMEOUT_SECONDS: float = Field(default=60.0, gt=0, le=600)
+    LLM_MAX_RETRIES: int = Field(default=2, ge=0, le=5)
+    LLM_MAX_OUTPUT_TOKENS: int = Field(default=2048, ge=256, le=32_000)
+    # Low temperature: an incident report is an analysis, not a creative brief,
+    # and reproducibility matters when two analysts compare notes.
+    LLM_TEMPERATURE: float = Field(default=0.2, ge=0.0, le=2.0)
+
+    # Bounds on what is packed into a prompt. Untrusted content is truncated
+    # rather than trusted to be small: a single 10 MB log line should not be
+    # able to push the real instructions out of the context window.
+    AI_MAX_ANOMALIES: int = Field(default=20, ge=1, le=200)
+    AI_MAX_LOG_ENTRIES: int = Field(default=40, ge=1, le=500)
+    AI_MAX_FIELD_CHARS: int = Field(default=2000, ge=100, le=50_000)
+    AI_KNOWLEDGE_TOP_K: int = Field(default=4, ge=0, le=20)
+
+    @field_validator("GROQ_API_KEY", mode="before")
+    @classmethod
+    def _blank_api_key_is_none(cls, value: object) -> object:
+        # An unset `GROQ_API_KEY=` in a .env file arrives as an empty string.
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
     # --- Knowledge base / RAG --------------------------------------------
     # Which embedding provider to use. "hashing" is deterministic and local:
