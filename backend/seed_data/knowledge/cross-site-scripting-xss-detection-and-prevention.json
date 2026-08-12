@@ -1,0 +1,12 @@
+{
+  "title": "Cross-Site Scripting XSS: Detection and Prevention",
+  "document_type": "playbook",
+  "tags": [
+    "xss",
+    "web",
+    "owasp",
+    "injection"
+  ],
+  "summary": "Identifying reflected, stored and DOM-based XSS and preventing recurrence.",
+  "content": "# Cross-Site Scripting (XSS): Detection and Prevention\n\n## What it is\nCross-site scripting is the injection of attacker-controlled script into a page that other\nusers load. The script runs with the privileges of the victim session, which makes session\ntheft, credential capture through injected forms, and actions performed as the victim all\npossible.\n\nThree variants matter operationally. Reflected XSS returns the payload in the response to the\nrequest that carried it, usually via a crafted link. Stored XSS persists the payload server\nside so it executes for every subsequent viewer, which makes it far more damaging. DOM-based\nXSS never involves the server in the injection at all: client-side JavaScript writes untrusted\ninput into the page.\n\n## Detection\nLook for script tags, javascript: URLs, onerror=, onload=, onmouseover=, document.cookie,\neval(, and their URL- and HTML-encoded equivalents appearing in request parameters, form\nfields, headers such as Referer and User-Agent, and file names. Content Security Policy\nviolation reports are a high-signal source: they fire when a page tries to execute script from\nan unexpected origin.\n\nStored XSS often shows first as an unusual outbound request from many user browsers to one\nunfamiliar host - the exfiltration channel.\n\n## Triage\nDetermine the variant. For stored XSS, find every record holding the payload and every user\nwho has rendered it since. Check whether session cookies carry HttpOnly; without it, assume\nsession tokens were captured. Review authentication logs for sessions used from unexpected\naddresses after the exposure window opened.\n\n## Containment\nRemove the stored payload. Invalidate sessions for users who may have rendered it. Deploy or\ntighten Content Security Policy. Where a parameter is the vector, filter it at the WAF while\nthe code fix is prepared.\n\n## Prevention\nEncode on output, contextually - HTML body, attribute, JavaScript and URL contexts each need\ndifferent encoding. Prefer frameworks that escape by default and avoid innerHTML,\ndocument.write and eval. Set HttpOnly and Secure on session cookies. Deploy a strict\nContent Security Policy. Validate input by allowlist, treating it as defence in depth rather\nthan the primary control.\n"
+}

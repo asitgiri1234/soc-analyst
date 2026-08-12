@@ -7,6 +7,7 @@ is invisible to autogeneration.
 
 from app.models.anomaly import Anomaly
 from app.models.audit_log import AuditLog
+from app.models.document_chunk import DocumentChunk
 from app.models.enums import (
     AnomalyStatus,
     AnomalyType,
@@ -37,6 +38,7 @@ __all__ = [
     # Models
     "Anomaly",
     "AuditLog",
+    "DocumentChunk",
     "Incident",
     "IncidentNote",
     "IncidentReport",

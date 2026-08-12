@@ -22,6 +22,7 @@ from app.models import (
     AnomalyType,
     AuditAction,
     AuditLog,
+    DocumentChunk,
     DocumentType,
     Incident,
     IncidentReport,
@@ -230,30 +231,41 @@ async def test_report_versions_are_unique_per_incident(session: AsyncSession) ->
             await session.flush()
 
 
-async def test_embeddings_round_trip_through_pgvector(session: AsyncSession) -> None:
-    vector = [0.05] * settings.EMBEDDING_DIMENSIONS
+async def _document(session: AsyncSession, title: str) -> SecurityDocument:
     document = SecurityDocument(
-        title="Ransomware containment playbook",
-        document_type=DocumentType.PLAYBOOK,
-        content="1. Isolate the host.",
-        embedding=vector,
-        embedding_model="test-embedder",
+        title=title, document_type=DocumentType.PLAYBOOK, content="1. Isolate the host."
     )
     session.add(document)
     await session.flush()
-    session.expunge(document)
+    return document
 
-    loaded = await session.get(SecurityDocument, document.id)
+
+async def test_embeddings_round_trip_through_pgvector(session: AsyncSession) -> None:
+    """Vectors live on chunks: retrieval is per passage, not per document."""
+    document = await _document(session, "Ransomware containment playbook")
+    vector = [0.05] * settings.EMBEDDING_DIMENSIONS
+    chunk = DocumentChunk(
+        document_id=document.id,
+        chunk_index=0,
+        content="Isolate the host.",
+        char_count=17,
+        embedding=vector,
+        embedding_model="test-embedder",
+    )
+    session.add(chunk)
+    await session.flush()
+    session.expunge(chunk)
+
+    loaded = await session.get(DocumentChunk, chunk.id)
     assert loaded is not None
     assert loaded.embedding is not None
     assert len(loaded.embedding) == settings.EMBEDDING_DIMENSIONS
     assert loaded.embedding[0] == pytest.approx(0.05)
 
-    # The column is optional until the embedding pipeline runs.
-    unembedded = SecurityDocument(
-        title="Access control policy",
-        document_type=DocumentType.POLICY,
-        content="Least privilege.",
+    # The column is optional: a chunk exists before it is embedded, so a
+    # provider outage costs the vector rather than the text.
+    unembedded = DocumentChunk(
+        document_id=document.id, chunk_index=1, content="Least privilege.", char_count=16
     )
     session.add(unembedded)
     await session.flush()
@@ -261,24 +273,33 @@ async def test_embeddings_round_trip_through_pgvector(session: AsyncSession) -> 
 
 
 async def test_vector_similarity_search_is_usable(session: AsyncSession) -> None:
+    document = await _document(session, "Similarity fixture")
     near = [0.1] * settings.EMBEDDING_DIMENSIONS
     far = [-0.1] * settings.EMBEDDING_DIMENSIONS
     session.add_all(
         [
-            SecurityDocument(
-                title="Near", document_type=DocumentType.RUNBOOK, content="x", embedding=near
+            DocumentChunk(
+                document_id=document.id,
+                chunk_index=0,
+                content="Near",
+                char_count=4,
+                embedding=near,
             ),
-            SecurityDocument(
-                title="Far", document_type=DocumentType.RUNBOOK, content="y", embedding=far
+            DocumentChunk(
+                document_id=document.id,
+                chunk_index=1,
+                content="Far",
+                char_count=3,
+                embedding=far,
             ),
         ]
     )
     await session.flush()
 
     ranked = await session.execute(
-        select(SecurityDocument.title).order_by(
-            SecurityDocument.embedding.cosine_distance(near)
-        )
+        select(DocumentChunk.content)
+        .where(DocumentChunk.document_id == document.id)
+        .order_by(DocumentChunk.embedding.cosine_distance(near))
     )
     assert ranked.scalars().first() == "Near"
 

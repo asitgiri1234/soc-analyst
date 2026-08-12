@@ -90,6 +90,42 @@ class Settings(BaseSettings):
     # not write an unbounded JSON column.
     INGEST_MAX_REPORTED_ERRORS: int = Field(default=100, ge=1, le=1000)
 
+    # --- Knowledge base / RAG --------------------------------------------
+    # Which embedding provider to use. "hashing" is deterministic and local:
+    # no API key, no network, and reproducible across runs, which makes it the
+    # right default for development and the whole test suite. "http" talks to
+    # any OpenAI-compatible /embeddings endpoint (OpenAI, Voyage, a local
+    # llama.cpp or Ollama server) selected by EMBEDDING_API_BASE_URL.
+    EMBEDDING_PROVIDER: Literal["hashing", "http"] = "hashing"
+    EMBEDDING_MODEL: str = "hashing-v1"
+    EMBEDDING_API_BASE_URL: str = "https://api.openai.com/v1"
+    EMBEDDING_API_KEY: str | None = None
+    EMBEDDING_TIMEOUT_SECONDS: float = Field(default=30.0, gt=0, le=300)
+    EMBEDDING_MAX_RETRIES: int = Field(default=2, ge=0, le=5)
+    # Texts per provider call. Providers charge and rate-limit per request, so
+    # batching matters; too large a batch risks the provider's own body limit.
+    EMBEDDING_BATCH_SIZE: int = Field(default=32, ge=1, le=512)
+
+    # Chunking. Characters, not tokens: the platform has no tokenizer for an
+    # arbitrary provider's model, and a character budget is a predictable
+    # proxy that never under-counts.
+    RAG_CHUNK_SIZE: int = Field(default=1200, ge=100, le=20_000)
+    RAG_CHUNK_OVERLAP: int = Field(default=200, ge=0, le=10_000)
+    RAG_TOP_K: int = Field(default=5, ge=1, le=50)
+    # Cosine similarity below this is not worth returning; retrieval that
+    # answers every query with something is retrieval that cannot say
+    # "nothing here is relevant".
+    RAG_MIN_SIMILARITY: float = Field(default=0.05, ge=0.0, le=1.0)
+
+    @model_validator(mode="after")
+    def _check_chunk_overlap(self) -> Self:
+        if self.RAG_CHUNK_OVERLAP >= self.RAG_CHUNK_SIZE:
+            raise ValueError(
+                "RAG_CHUNK_OVERLAP must be smaller than RAG_CHUNK_SIZE; an overlap "
+                "at or above the chunk size never advances and would loop forever."
+            )
+        return self
+
     # --- Anomaly detection -----------------------------------------------
     # Default span analysed when a request does not give one.
     DETECTION_WINDOW_HOURS: int = Field(default=24, ge=1, le=720)

@@ -1,0 +1,12 @@
+{
+  "title": "SQL Injection: Detection and Mitigation",
+  "document_type": "playbook",
+  "tags": [
+    "sql-injection",
+    "web",
+    "owasp",
+    "T1190"
+  ],
+  "summary": "Recognising SQL injection attempts in logs and remediating the underlying flaw.",
+  "content": "# SQL Injection: Detection and Mitigation\n\n## What it is\nSQL injection occurs when untrusted input is concatenated into a SQL statement, letting an\nattacker change the structure of the query rather than only its data. Consequences run from\nauthentication bypass and unauthorised data reads through to arbitrary file access and remote\ncode execution, depending on the database and its privileges.\n\n## What it looks like in logs\nWeb and WAF logs show SQL metacharacters and keywords in parameters: single quotes, double\ndashes, block comment markers, UNION SELECT, OR 1=1, SLEEP(, pg_sleep(, WAITFOR DELAY,\ninformation_schema, xp_cmdshell. Blind and time-based injection shows as repeated\nnear-identical requests whose response times differ systematically. Error-based injection\nproduces bursts of HTTP 500s with database error text in the response body.\n\nA long run of requests to one endpoint varying a single parameter, with alternating success\nand error responses, is the signature of automated tooling such as sqlmap.\n\n## Triage\nIdentify the endpoint and parameter under attack, then determine whether any attempt\nsucceeded: look for anomalous response sizes, unexpected 200s among the errors, and database\nlogs showing statements the application would never legitimately issue. Check whether the\ndatabase account used by the application is over-privileged - a successful injection against\na read-only account is a very different incident from one against a database owner.\n\n## Containment\nBlock the source at the WAF and add a rule for the observed pattern. Take the vulnerable\nendpoint out of service if exploitation succeeded. Preserve database audit logs before they\nroll. Assume any data readable by the application account was exposed, and scope the\nnotification obligations accordingly.\n\n## Remediation\nUse parameterised queries or prepared statements everywhere; never build SQL by string\nconcatenation. Validate and canonicalise input by allowlist. Apply least privilege to the\napplication database account. Disable verbose database errors in production responses. Add\na regression test that submits the exploit payload and asserts it is handled as data.\n"
+}

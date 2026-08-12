@@ -10,6 +10,7 @@ from app.db.base import Base
 from app.models import (
     Anomaly,
     AuditLog,
+    DocumentChunk,
     Incident,
     IncidentReport,
     LogEntry,
@@ -46,6 +47,7 @@ def test_all_models_are_registered() -> None:
         "audit_logs",
         "ingestion_jobs",
         "incident_notes",
+        "document_chunks",
     }
     assert expected == set(Base.metadata.tables)
 
@@ -128,17 +130,19 @@ def test_unique_constraints_on_natural_keys() -> None:
 
 
 def test_vector_columns_match_the_configured_dimensionality() -> None:
-    for model in (LogEntry, SecurityDocument):
+    for model in (LogEntry, DocumentChunk):
         column = model.__table__.columns["embedding"]
         assert column.type.dim == settings.EMBEDDING_DIMENSIONS, model.__name__
         assert column.nullable is True, model.__name__
 
 
 def test_document_embedding_has_a_cosine_vector_index() -> None:
+    """Retrieval orders by cosine distance; an index for another operator
+    class would simply be ignored by the planner."""
     index = next(
         index
-        for index in SecurityDocument.__table__.indexes
-        if index.name == "ix_security_documents_embedding_hnsw"
+        for index in DocumentChunk.__table__.indexes
+        if index.name == "ix_document_chunks_embedding_hnsw"
     )
     assert index.dialect_options["postgresql"]["using"] == "hnsw"
     assert index.dialect_options["postgresql"]["ops"] == {"embedding": "vector_cosine_ops"}
