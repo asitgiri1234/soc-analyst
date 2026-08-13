@@ -27,6 +27,7 @@ from app.db.session import get_session
 from app.main import app
 from app.models.enums import UserRole
 from app.models.user import User
+from app.services import rate_limit
 
 
 @pytest.fixture(autouse=True)
@@ -64,6 +65,32 @@ async def _denylist_off_without_redis(
     """
     if not redis_available:
         monkeypatch.setattr(settings, "AUTH_TOKEN_DENYLIST_ENABLED", False)
+
+
+@pytest.fixture(autouse=True)
+async def _clear_rate_limits() -> AsyncGenerator[None, None]:
+    """Start every test with empty rate-limit counters.
+
+    The counters live in Redis, outside the transaction the rest of the test
+    rolls back, and they are keyed by caller address -- which is 127.0.0.1 for
+    every test in the suite. Without this, the tests share one quota and the
+    order they run in decides which of them get a 429.
+    """
+    await _drop_rate_limit_keys()
+    yield
+    await _drop_rate_limit_keys()
+
+
+async def _drop_rate_limit_keys() -> None:
+    try:
+        redis = redis_module.get_redis()
+        keys = [key async for key in redis.scan_iter(f"{rate_limit.KEY_PREFIX}:*")]
+        if keys:
+            await redis.delete(*keys)
+    except (OSError, RedisError, RuntimeError):
+        # Redis absent, or a client left over from a finished event loop. The
+        # limiter fails open either way, so there is nothing to clear.
+        return
 
 
 @pytest.fixture

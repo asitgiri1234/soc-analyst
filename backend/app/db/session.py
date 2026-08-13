@@ -13,7 +13,12 @@ from app.core.config import settings
 
 engine: AsyncEngine = create_async_engine(
     settings.database_url,
-    echo=settings.DEBUG,
+    # Statement echo prints every query and its bound parameters, which for
+    # this application means usernames, source addresses and log message bodies
+    # landing in the application log. Useful while developing locally, and a
+    # standing data-exposure risk anywhere else, so DEBUG alone does not enable
+    # it -- the environment has to be `local` too.
+    echo=settings.DEBUG and settings.ENVIRONMENT == "local",
     pool_pre_ping=True,
     future=True,
 )

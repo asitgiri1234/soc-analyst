@@ -5,3 +5,7 @@ pytest-asyncio>=0.24
 httpx>=0.28
 ruff>=0.8
 mypy>=1.13
+
+# Checks the installed dependency tree against the Python advisory database.
+# A development tool, not a runtime dependency -- nothing imports it.
+pip-audit>=2.7

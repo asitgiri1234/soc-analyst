@@ -2,17 +2,30 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Request, status
+import hashlib
 
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+
+from app.api import limits
 from app.api.deps import CurrentUser, SessionDep, TokenClaimsDep
 from app.core.config import settings
 from app.core.security import create_access_token
 from app.models.enums import AuditAction
 from app.schemas.auth import LoginRequest, LogoutResponse, TokenResponse
 from app.schemas.user import UserCreate, UserRead
-from app.services import audit, auth, token_denylist
+from app.services import audit, auth, rate_limit, token_denylist
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
+
+
+def _account_key(email: str) -> str:
+    """A stable, non-reversible identifier for per-account login limiting.
+
+    The address is hashed before it becomes a Redis key: the counter has to
+    survive across requests, and a key store full of user email addresses is a
+    disclosure risk that buys nothing over a digest.
+    """
+    return hashlib.sha256(email.strip().lower().encode()).hexdigest()[:32]
 
 
 @router.post(
@@ -20,6 +33,7 @@ router = APIRouter(prefix="/auth", tags=["authentication"])
     response_model=UserRead,
     status_code=status.HTTP_201_CREATED,
     summary="Create an account",
+    dependencies=[Depends(limits.RegisterRateLimit)],
 )
 async def register(payload: UserCreate, session: SessionDep, request: Request) -> UserRead:
     """Register a new account.
@@ -43,14 +57,31 @@ async def register(payload: UserCreate, session: SessionDep, request: Request) -
     return UserRead.model_validate(user)
 
 
-@router.post("/login", response_model=TokenResponse, summary="Exchange credentials for a token")
+@router.post(
+    "/login",
+    response_model=TokenResponse,
+    summary="Exchange credentials for a token",
+    dependencies=[Depends(limits.LoginRateLimit)],
+)
 async def login(payload: LoginRequest, session: SessionDep, request: Request) -> TokenResponse:
     """Authenticate and receive an access token.
 
     Every outcome is audited. A failure returns 401 with the same message
     whatever went wrong, so the response cannot be used to discover which
     addresses have accounts.
+
+    Two limits apply. The dependency above counts attempts from this address;
+    the check below counts attempts against this *account*, so spraying one
+    password across many hosts still runs into a wall. Both are enforced before
+    the password is verified, so a refused attempt costs no Argon2 work.
     """
+    await limits.enforce(
+        _account_key(payload.email),
+        scope="login-account",
+        limit=settings.RATE_LIMIT_LOGIN_ATTEMPTS,
+        window=settings.RATE_LIMIT_LOGIN_WINDOW_SECONDS,
+    )
+
     user = await auth.authenticate(
         session, email=payload.email, password=payload.password, request=request
     )
@@ -62,6 +93,12 @@ async def login(payload: LoginRequest, session: SessionDep, request: Request) ->
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    # Credentials were right, so the preceding failures were fumbles rather
+    # than an attack. Clearing both counters keeps a user who mistyped their
+    # password three times from carrying that toward a lockout all afternoon.
+    await rate_limit.reset(_account_key(payload.email), scope="login-account")
+    await rate_limit.reset(limits.caller_id(request), scope="login")
 
     token, expires_at, jti = create_access_token(user_id=user.id, role=user.role)
 

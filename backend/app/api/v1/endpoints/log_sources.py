@@ -88,6 +88,30 @@ async def get_log_source(
     return LogSourceRead.model_validate(source)
 
 
+def sanitise_filename(raw: str | None) -> str:
+    """Reduce a client-supplied filename to a bare, bounded name.
+
+    Nothing here writes the upload to disk, so this is not what stops a path
+    traversal -- there is no path to traverse. It matters because the name is
+    stored on the job record, echoed back through the API, and read by whoever
+    is looking at ingestion history: `../../etc/passwd` or a name carrying
+    control characters should not survive that round trip intact.
+    """
+    if not raw:
+        return "upload"
+
+    # Take the last component under either separator, so a Windows client's
+    # `C:\logs\auth.csv` and a POSIX path both reduce to the name.
+    name = raw.replace("\\", "/").split("/")[-1]
+    # Strip anything non-printable, and the characters that make a name
+    # ambiguous when it is rendered back into a message.
+    cleaned = "".join(
+        char for char in name if char.isprintable() and char not in '<>:"|?*'
+    ).strip(" .")
+
+    return cleaned[:255] or "upload"
+
+
 async def _read_within_limit(upload: UploadFile) -> bytes:
     """Read an upload, refusing anything over the configured size.
 
@@ -143,7 +167,7 @@ async def ingest_file(
     if source is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Log source not found")
 
-    filename = file.filename or "upload"
+    filename = sanitise_filename(file.filename)
     fmt = parsers.detect_format(filename, file.content_type)
     if fmt is None:
         raise HTTPException(

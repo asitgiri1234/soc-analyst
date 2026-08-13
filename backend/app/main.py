@@ -10,6 +10,7 @@ from app import __version__
 from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.logging import configure_logging, get_logger
+from app.core.middleware import SecurityHeadersMiddleware, install_error_handlers
 from app.db.redis import close_redis
 from app.db.session import dispose_engine
 
@@ -27,23 +28,43 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
 
 
 def create_app() -> FastAPI:
+    # The interactive docs and the schema behind them enumerate every route,
+    # parameter and error shape. That is a convenience while building and free
+    # reconnaissance once deployed, so production serves neither.
+    expose_docs = settings.ENVIRONMENT != "production"
+
     app = FastAPI(
         title=settings.PROJECT_NAME,
         version=__version__,
-        debug=settings.DEBUG,
-        openapi_url=f"{settings.API_V1_PREFIX}/openapi.json",
-        docs_url="/docs",
-        redoc_url="/redoc",
+        # Starlette's debug mode renders the traceback -- and anything in the
+        # frames, such as a database URL with its password -- into the HTTP
+        # response body. It is off in every environment, including local: the
+        # traceback still goes to the log, where it belongs, and dev then
+        # exercises the same error path that production will.
+        debug=False,
+        openapi_url=f"{settings.API_V1_PREFIX}/openapi.json" if expose_docs else None,
+        docs_url="/docs" if expose_docs else None,
+        redoc_url="/redoc" if expose_docs else None,
         lifespan=lifespan,
     )
 
+    # Order matters: middleware added last runs first, so the security headers
+    # wrap the CORS response too.
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.BACKEND_CORS_ORIGINS,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        # Explicit rather than "*". With credentials allowed, a wildcard that
+        # reflects whatever a caller asks for removes the point of having a
+        # list of permitted origins at all.
+        allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
+        expose_headers=["X-Request-ID", "Retry-After"],
+        max_age=600,
     )
+    app.add_middleware(SecurityHeadersMiddleware)
+
+    install_error_handlers(app)
 
     app.include_router(api_router, prefix=settings.API_V1_PREFIX)
 

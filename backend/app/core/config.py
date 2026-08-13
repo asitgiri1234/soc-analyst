@@ -70,6 +70,36 @@ class Settings(BaseSettings):
     # Rejected at registration; also the floor for any password change.
     MIN_PASSWORD_LENGTH: int = Field(default=12, ge=8)
 
+    # --- Rate limiting ---------------------------------------------------
+    # Counters live in Redis. Disable only for a deployment that throttles at
+    # the edge instead; without either, credential guessing is unbounded.
+    RATE_LIMIT_ENABLED: bool = True
+
+    # Login is the expensive, attackable endpoint: each attempt costs an Argon2
+    # verification, and success grants a session. Limited per source address
+    # and, separately, per account.
+    RATE_LIMIT_LOGIN_ATTEMPTS: int = Field(default=10, ge=1, le=1000)
+    RATE_LIMIT_LOGIN_WINDOW_SECONDS: int = Field(default=300, ge=1, le=86_400)
+
+    # Registration is open, so it is also a way to fill the user table.
+    RATE_LIMIT_REGISTER_ATTEMPTS: int = Field(default=5, ge=1, le=1000)
+    RATE_LIMIT_REGISTER_WINDOW_SECONDS: int = Field(default=3600, ge=1, le=86_400)
+
+    # Generating a report spends money and third-party quota, so it is limited
+    # per analyst rather than per address.
+    RATE_LIMIT_ANALYZE_REQUESTS: int = Field(default=20, ge=1, le=1000)
+    RATE_LIMIT_ANALYZE_WINDOW_SECONDS: int = Field(default=3600, ge=1, le=86_400)
+
+    # A backstop for authenticated traffic generally, generous enough that
+    # normal console use never reaches it.
+    RATE_LIMIT_DEFAULT_REQUESTS: int = Field(default=300, ge=1, le=100_000)
+    RATE_LIMIT_DEFAULT_WINDOW_SECONDS: int = Field(default=60, ge=1, le=86_400)
+
+    # Set only where a trusted proxy or load balancer terminates the connection
+    # and sets X-Forwarded-For. Left false, the header is ignored, because a
+    # client that can forge it can hand itself an unlimited quota.
+    TRUST_PROXY_HEADERS: bool = False
+
     @model_validator(mode="after")
     def _reject_insecure_secret_key(self) -> Self:
         if self.ENVIRONMENT == "local":

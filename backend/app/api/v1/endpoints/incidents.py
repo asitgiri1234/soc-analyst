@@ -16,7 +16,9 @@ from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
+from app.api import limits
 from app.api.deps import RequireAdmin, RequireAnalyst, RequireViewer, SessionDep
+from app.core.config import settings
 from app.models.anomaly import Anomaly
 from app.models.enums import AttackType, AuditAction, IncidentStatus, Severity
 from app.models.incident import Incident
@@ -331,7 +333,18 @@ async def analyze_incident(
 
     Requires the analyst role or higher: generating a report costs money and
     writes to the incident record. Viewers can read the results.
+
+    Rate limited per analyst rather than per address. The cost here is a
+    third-party API call and its quota, which is spent by whoever asked for it
+    no matter which host they asked from.
     """
+    await limits.enforce(
+        str(analyst.id),
+        scope="incident-analyze",
+        limit=settings.RATE_LIMIT_ANALYZE_REQUESTS,
+        window=settings.RATE_LIMIT_ANALYZE_WINDOW_SECONDS,
+    )
+
     incident = await _load(session, incident_id)
 
     try:
