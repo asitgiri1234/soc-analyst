@@ -8,6 +8,7 @@ from fastapi import APIRouter
 
 from app.api.v1.endpoints import (
     auth,
+    dashboard,
     detection,
     health,
     incidents,
@@ -27,4 +28,5 @@ api_router.include_router(ingestion_jobs.router)
 api_router.include_router(detection.router)
 api_router.include_router(incidents.router)
 api_router.include_router(knowledge.router)
+api_router.include_router(dashboard.router)
 api_router.include_router(protected.router)

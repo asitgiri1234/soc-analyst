@@ -22,8 +22,10 @@ from app.models.enums import AttackType, AuditAction, IncidentStatus, Severity
 from app.models.incident import Incident
 from app.models.incident_note import IncidentNote
 from app.models.incident_report import IncidentReport
+from app.models.log_entry import LogEntry
 from app.models.user import User
 from app.schemas.analysis import AnalyzeRequest, ReportRead
+from app.schemas.dashboard import LogEntryRead
 from app.schemas.incident import (
     AnomalyLink,
     IncidentCreate,
@@ -382,6 +384,35 @@ async def analyze_incident(
     await session.commit()
     await session.refresh(report)
     return ReportRead.model_validate(report)
+
+
+@router.get(
+    "/{incident_id}/evidence",
+    response_model=list[LogEntryRead],
+    summary="Log evidence behind an incident",
+)
+async def list_evidence(
+    incident_id: uuid.UUID,
+    session: SessionDep,
+    _viewer: RequireViewer,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+) -> list[LogEntryRead]:
+    """The log entries the incident's linked anomalies were argued from.
+
+    Scoped to the incident's own anomalies rather than to their whole log
+    source: this endpoint is evidence for one investigation, not a log search,
+    and widening it would let any viewer page the estate's traffic through an
+    incident id.
+    """
+    await _load(session, incident_id)
+    result = await session.execute(
+        select(LogEntry)
+        .join(Anomaly, Anomaly.log_entry_id == LogEntry.id)
+        .where(Anomaly.incident_id == incident_id)
+        .order_by(LogEntry.event_timestamp.desc())
+        .limit(limit)
+    )
+    return [LogEntryRead.model_validate(entry) for entry in result.scalars().unique()]
 
 
 @router.get(

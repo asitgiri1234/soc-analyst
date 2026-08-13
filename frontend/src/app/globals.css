@@ -1,14 +1,108 @@
 @import "tailwindcss";
 
+/*
+ * A security console, not a generic admin panel.
+ *
+ * Dark-first and deliberately low-chroma: on a wall display the only saturated
+ * colour in the room should be a severity. Everything structural is a slate
+ * neutral so that a single critical badge reads across the room.
+ *
+ * Severity is a design token rather than a per-component choice, so the same
+ * red means the same thing on a badge, a chart bar and a table row.
+ */
+
 @theme inline {
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, "Cascadia Code", Menlo, monospace;
+
+  /* Surfaces, darkest to lightest. */
+  --color-soc-base: #0a0f16;
+  --color-soc-surface: #111823;
+  --color-soc-raised: #172030;
+  --color-soc-border: #22304a;
+  --color-soc-hover: #1c2740;
+
+  /* Text. */
+  --color-soc-text: #e6edf7;
+  --color-soc-muted: #8b9bb4;
+  --color-soc-faint: #5d6d86;
+
+  /* Brand / focus. */
+  --color-soc-accent: #38bdf8;
+  --color-soc-accent-dim: #0d5f80;
+
+  /* Severity scale. */
+  --color-sev-critical: #f43f5e;
+  --color-sev-high: #fb923c;
+  --color-sev-medium: #facc15;
+  --color-sev-low: #38bdf8;
+  --color-sev-info: #64748b;
+
+  /* Status. */
+  --color-soc-ok: #34d399;
+  --color-soc-warn: #fbbf24;
+  --color-soc-danger: #f43f5e;
 }
 
 body {
   font-family: var(--font-sans);
+  background-color: var(--color-soc-base);
+  color: var(--color-soc-text);
 }
 
-code {
+code,
+pre {
   font-family: var(--font-mono);
+}
+
+/* A faint grid, the way an operations console reads. */
+.soc-grid-bg {
+  background-image:
+    linear-gradient(to right, rgba(56, 189, 248, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(56, 189, 248, 0.04) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+/* Focus stays visible everywhere: keyboard triage is normal in a SOC. */
+:focus-visible {
+  outline: 2px solid var(--color-soc-accent);
+  outline-offset: 2px;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-soc-base);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-soc-border);
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-soc-hover);
+}
+
+@keyframes soc-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.soc-pulse {
+  animation: soc-pulse 2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .soc-pulse {
+    animation: none;
+  }
 }

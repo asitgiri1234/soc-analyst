@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
 import "./globals.css";
+import { AuthProvider } from "@/lib/auth";
 import { env } from "@/lib/env";
 
 export const metadata: Metadata = {
@@ -12,8 +13,8 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className="h-full antialiased">
-      <body className="min-h-full flex flex-col bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
-        {children}
+      <body className="min-h-full bg-soc-base text-soc-text">
+        <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
   );
