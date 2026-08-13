@@ -5,6 +5,8 @@ description = "AI SOC Analyst backend API"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115",
+    # Imported directly by the security middleware.
+    "starlette>=0.40",
     "uvicorn[standard]>=0.32",
     "pydantic>=2.9",
     "pydantic-settings>=2.6",
@@ -18,15 +20,17 @@ dependencies = [
     "argon2-cffi>=23.1",
     "email-validator>=2.2",
     "python-multipart>=0.0.18",
+    # Runtime: the Groq provider and the HTTP embedding provider import it.
+    "httpx>=0.28",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
-    "httpx>=0.28",
     "ruff>=0.8",
     "mypy>=1.13",
+    "pip-audit>=2.7",
 ]
 
 [build-system]

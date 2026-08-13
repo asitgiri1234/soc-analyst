@@ -1,0 +1,215 @@
+# Continuous integration.
+#
+# Four independent jobs so a frontend typo does not hide a backend regression:
+# each reports its own status and they run in parallel.
+#
+# The backend job runs against a real PostgreSQL with pgvector and a real
+# Redis. The suite needs both -- the vector search is exercised against actual
+# HNSW indexes and the rate limiter against actual counters -- and the fixtures
+# skip rather than fail when they are missing, so a job without services would
+# report green while testing almost nothing.
+#
+# No secrets are required. Tests use a hashing embedding provider and mocked
+# Groq responses, so nothing here needs an API key.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# A new push supersedes an in-flight run for the same ref.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "22"
+
+jobs:
+  backend-tests:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: soc
+          POSTGRES_PASSWORD: soc
+          POSTGRES_DB: soc_analyst
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U soc -d soc_analyst"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      ENVIRONMENT: local
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: soc
+      POSTGRES_PASSWORD: soc
+      POSTGRES_DB: soc_analyst
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      # A throwaway signing key for the test run. `local` accepts the shipped
+      # placeholder, but being explicit keeps the run honest about needing one.
+      SECRET_KEY: ci-only-key-not-used-anywhere-else-0123456789
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Apply migrations
+        # The same script the production deploy runs, so a migration that
+        # cannot be applied fails here rather than at rollout. It also creates
+        # the pgvector extension, which the service container does not.
+        run: python -m scripts.migrate
+
+      - name: Check for undeclared schema drift
+        # Fails when the ORM models and the migration history disagree -- the
+        # usual cause being a model edited without a revision to match.
+        run: alembic check
+
+      - name: Run tests
+        run: pytest -q
+
+  backend-quality:
+    name: Backend lint and types
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Lint
+        run: ruff check app tests
+
+      # No `ruff format --check` gate. The codebase is hand-wrapped for
+      # readability and does not match the formatter's output; adopting it is a
+      # deliberate one-off reformat, not something to fail builds over until
+      # someone has decided to do it.
+
+      - name: Type check
+        run: mypy app
+
+  frontend:
+    name: Frontend lint, types and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npx eslint .
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Build
+        # The build is the real integration test for a frontend: it runs the
+        # type checker over the route tree and prerenders every static page.
+        run: npm run build
+
+  security:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Audit Python dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip pip-audit
+          pip-audit -r requirements.txt --progress-spinner off
+
+      - name: Audit npm dependencies
+        working-directory: frontend
+        # Production dependencies only. A vulnerability in a build-time tool is
+        # worth knowing about but is not shipped to a user, and failing the
+        # build on it means the pipeline blocks on advisories nobody can act on.
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Check no secrets are committed
+        # A cheap backstop against the one credential shape this repository
+        # actually handles. `git grep` searches tracked files only, which is
+        # exactly the question being asked.
+        run: |
+          if git grep -nIE 'gsk_[A-Za-z0-9]{20,}' -- . ':(exclude).github/workflows/*'; then
+            echo "::error::A Groq API key appears to be committed."
+            exit 1
+          fi
+          echo "No committed API keys found."

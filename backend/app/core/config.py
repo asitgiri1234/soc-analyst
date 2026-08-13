@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     API_V1_PREFIX: str = "/api/v1"
     LOG_LEVEL: str = "INFO"
+    # "text" is readable in a terminal; "json" is one object per line for a log
+    # shipper. Deployments should set json -- see `app.core.logging`.
+    LOG_FORMAT: Literal["text", "json"] = "text"
 
     # --- Server --------------------------------------------------------
     BACKEND_HOST: str = "0.0.0.0"

@@ -1,7 +1,19 @@
-node_modules/
-.next/
-out/
+# --- Never, under any circumstances -----------------------------------------
+# NEXT_PUBLIC_* values are inlined into the bundle at build time, so build
+# configuration must be passed explicitly as build arguments rather than picked
+# up from a stray file in the context.
 .env
 .env.*
-!.env.example
+
+# --- Rebuilt inside the image ------------------------------------------------
+# `**/` so nested copies are excluded too: patterns are anchored to the context
+# root, and a bare `node_modules/` leaves any nested one in the context.
+**/node_modules/
+.next/
+out/
+
+# --- Local noise --------------------------------------------------------------
 npm-debug.log*
+*.tsbuildinfo
+Dockerfile
+.dockerignore

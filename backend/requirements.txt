@@ -1,5 +1,9 @@
 # Runtime dependencies. Install with: pip install -r requirements.txt
 fastapi>=0.115
+# Imported directly by the security middleware. It arrives transitively with
+# FastAPI, but a module this codebase imports by name is one it should declare:
+# the transitive route is FastAPI's choice to change, not ours.
+starlette>=0.40
 uvicorn[standard]>=0.32
 pydantic>=2.9
 pydantic-settings>=2.6
@@ -18,3 +22,9 @@ email-validator>=2.2
 # --- Ingestion ---
 # Backs FastAPI's UploadFile / multipart form parsing.
 python-multipart>=0.0.18
+
+# --- Outbound HTTP ---
+# Runtime, not just test: the Groq provider and the HTTP embedding provider both
+# import it. Nothing else in this list pulls it in, so a production image built
+# without it fails at import time rather than on the first API call.
+httpx>=0.28

@@ -1,10 +1,32 @@
+# Keep the build context small and free of anything environment-specific.
+#
+# Patterns are anchored to the context root, so a bare `__pycache__/` matches
+# only the one at the top level and leaves every nested cache in place. `**/`
+# is what makes a rule recursive -- without it these directories ride along
+# into the image, carrying .pyc files built by a different interpreter than the
+# one in the runtime stage.
+
+# --- Never, under any circumstances -----------------------------------------
+# Real configuration must arrive through the environment at run time. The
+# example file has no secrets in it but has no purpose in an image either.
+.env
+.env.*
+**/.env
+**/.env.*
+
+# --- Local toolchain and caches ---------------------------------------------
 .venv/
 venv/
-__pycache__/
-*.pyc
+**/__pycache__/
+**/*.pyc
+**/*.pyo
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
-.env
-.env.*
-!.env.example
+.coverage
+htmlcov/
+
+# --- Not needed at runtime ---------------------------------------------------
+Dockerfile
+.dockerignore
+requirements-dev.txt

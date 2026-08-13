@@ -1,0 +1,142 @@
+# Production topology: database, cache, a one-shot migration job, the API, and
+# the console.
+#
+# Run with:  docker compose -f docker-compose.prod.yml up -d --build
+#
+# Every secret comes from the environment. Nothing here has a default that
+# would work in production by accident: POSTGRES_PASSWORD and SECRET_KEY have
+# no fallback, so compose refuses to start rather than quietly bringing up a
+# platform secured with a placeholder.
+#
+# The startup order is the point of this file. `migrate` runs to completion
+# before the API is allowed to start, so no application process ever serves
+# against a schema it has not been migrated to.
+
+name: soc-analyst-prod
+
+x-postgres-env: &postgres-env
+  POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+  POSTGRES_DB: ${POSTGRES_DB:-soc_analyst}
+
+# Settings shared by the migration job and the API: they must agree about where
+# the database is and how tokens are signed, and an anchor is how that is
+# guaranteed rather than hoped for.
+x-backend-env: &backend-env
+  ENVIRONMENT: ${ENVIRONMENT:-production}
+  DEBUG: "false"
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  LOG_FORMAT: json
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: 5432
+  POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+  POSTGRES_DB: ${POSTGRES_DB:-soc_analyst}
+  REDIS_HOST: redis
+  REDIS_PORT: 6379
+  SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY - generate with openssl rand -hex 32}
+  ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+  BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:?set BACKEND_CORS_ORIGINS to the console origin}
+  # Optional: the AI analysis endpoint reports 500 without it and the rest of
+  # the platform works normally.
+  GROQ_API_KEY: ${GROQ_API_KEY:-}
+  GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
+  EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-hashing}
+  TRUST_PROXY_HEADERS: ${TRUST_PROXY_HEADERS:-false}
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment: *postgres-env
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Only runs on a first cluster init; the migration job creates the
+      # extensions too, for managed databases that never run this at all.
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    # Not published. Nothing outside this network needs to reach the database,
+    # and a database on a public port is how estates get encrypted.
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB:-soc_analyst}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1"]
+    volumes:
+      - redis_data:/data
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Runs once per deploy, to completion, before the API starts. Takes an
+  # advisory lock, so two concurrent deploys queue instead of racing.
+  migrate:
+    build:
+      context: ./backend
+    restart: "no"
+    command: ["python", "-m", "scripts.migrate"]
+    environment: *backend-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    environment: *backend-env
+    depends_on:
+      # The API starts only after migrations have exited successfully. A failed
+      # migration therefore stops the rollout instead of producing replicas
+      # that crash-loop against the wrong schema.
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    command:
+      - uvicorn
+      - app.main:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8000"
+      - --workers
+      - "${BACKEND_WORKERS:-4}"
+      # Trust no proxy headers by default; see TRUST_PROXY_HEADERS.
+      - --no-server-header
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Build-time, not run-time: Next inlines NEXT_PUBLIC_* into the bundle,
+        # so changing this needs a rebuild, not a restart.
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:?set NEXT_PUBLIC_API_BASE_URL to the API URL the browser will use}
+        NEXT_PUBLIC_API_VERSION: ${NEXT_PUBLIC_API_VERSION:-v1}
+        NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-AI SOC Analyst}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+
+volumes:
+  postgres_data:
+  redis_data:

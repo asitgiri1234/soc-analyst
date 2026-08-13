@@ -26,7 +26,7 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.core.config import settings
-from app.core.logging import get_logger
+from app.core.logging import get_logger, request_id_var
 
 logger = get_logger(__name__)
 
@@ -83,8 +83,14 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         request_id = request.headers.get(REQUEST_ID_HEADER) or str(uuid.uuid4())
         # Available to handlers and to the error responder below.
         request.state.request_id = request_id
+        # And to every log line emitted while handling this request, so a
+        # client's report of an error leads straight to the line explaining it.
+        token = request_id_var.set(request_id)
 
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        finally:
+            request_id_var.reset(token)
 
         for header, value in BASE_HEADERS.items():
             response.headers.setdefault(header, value)
@@ -120,12 +126,14 @@ def install_error_handlers(app: FastAPI) -> None:
         request: Request, exc: Exception
     ) -> JSONResponse:
         request_id = getattr(request.state, "request_id", "unknown")
-        logger.exception(
-            "unhandled error on %s %s (request_id=%s)",
+        logger.error(
+            "unhandled error on %s %s",
             request.method,
             request.url.path,
-            request_id,
             exc_info=exc,
+            # Passed explicitly: this handler runs outside the middleware, so
+            # the context variable has already been reset by now.
+            extra={"request_id": request_id},
         )
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

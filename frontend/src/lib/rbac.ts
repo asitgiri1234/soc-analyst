@@ -20,18 +20,17 @@ export function hasAtLeast(role: UserRole | undefined, minimum: UserRole): boole
   return RANK[role] >= RANK[minimum];
 }
 
-/** Read security data: every authenticated tier. */
-export const canRead = (role: UserRole | undefined) => hasAtLeast(role, "viewer");
-
-/** Create and modify incidents, notes, and detections. */
+/**
+ * Create and modify incidents, notes, and detections.
+ *
+ * Reading needs no helper: every authenticated tier may read, so a screen the
+ * user can reach at all is one they may read.
+ */
 export const canInvestigate = (role: UserRole | undefined) => hasAtLeast(role, "analyst");
 
 /** Generate an AI report -- analyst or above, matching the analyze endpoint. */
 export const canGenerateReport = (role: UserRole | undefined) =>
   hasAtLeast(role, "analyst");
-
-/** Manage users and delete incidents. */
-export const canAdminister = (role: UserRole | undefined) => hasAtLeast(role, "admin");
 
 export const ROLE_LABEL: Record<UserRole, string> = {
   admin: "Administrator",
