@@ -30,6 +30,7 @@ from app.models.mixins import (
 
 if TYPE_CHECKING:
     from app.models.anomaly import Anomaly
+    from app.models.incident_attachment import IncidentAttachment
     from app.models.incident_note import IncidentNote
     from app.models.incident_report import IncidentReport
     from app.models.user import User
@@ -127,6 +128,12 @@ class Incident(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
         order_by="IncidentNote.created_at",
+    )
+    attachments: Mapped[list[IncidentAttachment]] = relationship(
+        back_populates="incident",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="IncidentAttachment.created_at",
     )
 
     @property

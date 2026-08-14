@@ -12,16 +12,27 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, Request, Response, status
+from fastapi import (
+    APIRouter,
+    File,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.api import limits
 from app.api.deps import RequireAdmin, RequireAnalyst, RequireViewer, SessionDep
+from app.api.v1.endpoints.log_sources import CHUNK_BYTES, sanitise_filename
 from app.core.config import settings
 from app.models.anomaly import Anomaly
 from app.models.enums import AttackType, AuditAction, IncidentStatus, Severity
 from app.models.incident import Incident
+from app.models.incident_attachment import IncidentAttachment
 from app.models.incident_note import IncidentNote
 from app.models.incident_report import IncidentReport
 from app.models.log_entry import LogEntry
@@ -30,6 +41,8 @@ from app.schemas.analysis import AnalyzeRequest, ReportRead
 from app.schemas.dashboard import LogEntryRead
 from app.schemas.incident import (
     AnomalyLink,
+    AttachmentDetail,
+    AttachmentRead,
     IncidentCreate,
     IncidentRead,
     IncidentSummary,
@@ -37,7 +50,7 @@ from app.schemas.incident import (
     NoteCreate,
     NoteRead,
 )
-from app.services import ai, audit
+from app.services import ai, attachments, audit
 from app.services import incidents as service
 
 router = APIRouter(prefix="/incidents", tags=["incidents"])
@@ -52,7 +65,11 @@ async def _load(session: SessionDep, incident_id: uuid.UUID) -> Incident:
     result = await session.execute(
         select(Incident)
         .where(Incident.id == incident_id)
-        .options(selectinload(Incident.anomalies), selectinload(Incident.notes))
+        .options(
+            selectinload(Incident.anomalies),
+            selectinload(Incident.notes),
+            selectinload(Incident.attachments),
+        )
         # Without this the identity map hands back the instance loaded earlier in
         # the request, whose collections predate the write we just made.
         .execution_options(populate_existing=True)
@@ -397,6 +414,171 @@ async def analyze_incident(
     await session.commit()
     await session.refresh(report)
     return ReportRead.model_validate(report)
+
+
+# --- Attachments -----------------------------------------------------------
+
+
+@router.post(
+    "/{incident_id}/attachments",
+    response_model=AttachmentRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Attach a context file",
+)
+async def add_attachment(
+    incident_id: uuid.UUID,
+    session: SessionDep,
+    request: Request,
+    analyst: RequireAnalyst,
+    file: Annotated[UploadFile, File(description="A text document, up to 2 MB")],
+) -> AttachmentRead:
+    """Attach a text file to an incident as context for the analysis.
+
+    The file is stored as its extracted text, never as bytes and never parsed
+    into log entries. It reaches the model inside the same untrusted fence as
+    log lines: an analyst's upload is evidence to read, not telemetry to score.
+    """
+    incident = await _load(session, incident_id)
+    filename = sanitise_filename(file.filename)
+
+    payload = await _read_attachment_within_limit(file)
+
+    try:
+        extracted = attachments.extract(
+            payload, filename=filename, declared_type=file.content_type
+        )
+    except attachments.AttachmentError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail=str(exc)
+        ) from exc
+
+    attachment = IncidentAttachment(
+        incident_id=incident.id,
+        uploaded_by_id=analyst.id,
+        uploaded_by_username=analyst.username,
+        filename=filename,
+        content_type=extracted.content_type,
+        size_bytes=len(payload),
+        content=extracted.content,
+        truncated=extracted.truncated,
+    )
+    session.add(attachment)
+    await session.flush()
+
+    await audit.record(
+        session,
+        action=AuditAction.CREATE,
+        resource_type="incident_attachment",
+        actor=analyst,
+        resource_id=attachment.id,
+        description=f"attached {filename!r} to {incident.reference}",
+        context={"incident": incident.reference, "bytes": len(payload)},
+        request=request,
+    )
+    await session.commit()
+    await session.refresh(attachment)
+    return AttachmentRead.model_validate(attachment)
+
+
+async def _read_attachment_within_limit(upload: UploadFile) -> bytes:
+    """Read an attachment, refusing anything over the configured size.
+
+    Counted as it arrives rather than trusting Content-Length, for the same
+    reason the log upload does: the header is client-supplied.
+    """
+    limit = settings.ATTACHMENT_MAX_BYTES
+    chunks: list[bytes] = []
+    total = 0
+
+    while chunk := await upload.read(CHUNK_BYTES):
+        total += len(chunk)
+        if total > limit:
+            raise HTTPException(
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                detail=f"Attachment exceeds the {limit} byte limit",
+            )
+        chunks.append(chunk)
+
+    if total == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="The file is empty"
+        )
+    return b"".join(chunks)
+
+
+@router.get(
+    "/{incident_id}/attachments",
+    response_model=list[AttachmentRead],
+    summary="List attachments",
+)
+async def list_attachments(
+    incident_id: uuid.UUID, session: SessionDep, _viewer: RequireViewer
+) -> list[AttachmentRead]:
+    """Attachments on an incident, without their bodies."""
+    await _load(session, incident_id)
+    result = await session.execute(
+        select(IncidentAttachment)
+        .where(IncidentAttachment.incident_id == incident_id)
+        .order_by(IncidentAttachment.created_at.desc())
+    )
+    return [AttachmentRead.model_validate(item) for item in result.scalars()]
+
+
+@router.get(
+    "/{incident_id}/attachments/{attachment_id}",
+    response_model=AttachmentDetail,
+    summary="Fetch an attachment's text",
+)
+async def get_attachment(
+    incident_id: uuid.UUID,
+    attachment_id: uuid.UUID,
+    session: SessionDep,
+    _viewer: RequireViewer,
+) -> AttachmentDetail:
+    attachment = await session.get(IncidentAttachment, attachment_id)
+    # The incident check is what stops an attachment being read by quoting any
+    # incident id that happens to be known.
+    if attachment is None or attachment.incident_id != incident_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found"
+        )
+    return AttachmentDetail.model_validate(attachment)
+
+
+@router.delete(
+    "/{incident_id}/attachments/{attachment_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Remove an attachment",
+)
+async def delete_attachment(
+    incident_id: uuid.UUID,
+    attachment_id: uuid.UUID,
+    session: SessionDep,
+    request: Request,
+    analyst: RequireAnalyst,
+) -> Response:
+    """Remove an attachment. Analyst and above -- the file is context an
+    analyst added, not the investigation record itself."""
+    attachment = await session.get(IncidentAttachment, attachment_id)
+    if attachment is None or attachment.incident_id != incident_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found"
+        )
+
+    filename = attachment.filename
+    await audit.record(
+        session,
+        action=AuditAction.DELETE,
+        resource_type="incident_attachment",
+        actor=analyst,
+        resource_id=attachment.id,
+        description=f"removed attachment {filename!r}",
+        context={"incident_id": str(incident_id)},
+        request=request,
+    )
+    await session.delete(attachment)
+    await session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get(

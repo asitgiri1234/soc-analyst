@@ -128,6 +128,24 @@ export interface IncidentSummary {
   updated_at: string;
 }
 
+export interface IncidentAttachment {
+  id: string;
+  incident_id: string;
+  uploaded_by_id: string | null;
+  uploaded_by_username: string | null;
+  filename: string;
+  content_type: string | null;
+  size_bytes: number;
+  /** True when the stored text was cut at the configured cap. */
+  truncated: boolean;
+  created_at: string;
+}
+
+/** An attachment with its extracted text, from the single-attachment endpoint. */
+export interface IncidentAttachmentDetail extends IncidentAttachment {
+  content: string;
+}
+
 export interface Incident extends IncidentSummary {
   description: string | null;
   affected_assets: Record<string, unknown>[];
@@ -136,6 +154,7 @@ export interface Incident extends IncidentSummary {
   context: Record<string, unknown>;
   anomalies: LinkedAnomaly[];
   notes: IncidentNote[];
+  attachments: IncidentAttachment[];
 }
 
 export interface Anomaly {

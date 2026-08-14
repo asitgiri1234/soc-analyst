@@ -14,7 +14,9 @@
  */
 
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
+
+import { ATTACHMENT_ACCEPT } from "@/components/incidents/attachments-panel";
 
 import {
   Field,
@@ -130,6 +132,7 @@ export function RaiseIncidentModal({
   const [summary, setSummary] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const effectiveTitle = title.trim() || suggestedTitle;
 
@@ -148,6 +151,31 @@ export function RaiseIncidentModal({
           anomaly_ids: anomalyIds,
         },
       });
+
+      // The attachment needs an incident to hang off, so it is a second call.
+      // A failure here must not lose the incident that was just created: the
+      // analyst is told, and lands on the incident to retry from its panel.
+      const file = fileRef.current?.files?.[0];
+      if (file) {
+        const form = new FormData();
+        form.append("file", file);
+        try {
+          await apiFetch(`/incidents/${incident.id}/attachments`, {
+            method: "POST",
+            body: form,
+          });
+        } catch (caught) {
+          setError(
+            caught instanceof ApiError
+              ? `Incident created, but the file was not attached: ${caught.message}`
+              : "Incident created, but the file was not attached.",
+          );
+          setSaving(false);
+          router.push(`/incidents/${incident.id}`);
+          return;
+        }
+      }
+
       onClose();
       // Straight to the incident, where the AI analysis can be generated.
       router.push(`/incidents/${incident.id}`);
@@ -224,6 +252,20 @@ export function RaiseIncidentModal({
             rows={3}
             maxLength={4000}
             className={`${inputClass} resize-y`}
+          />
+        </Field>
+
+        <Field
+          label="Attach a file"
+          htmlFor="incident-attachment"
+          hint="Optional. A text document up to 2 MB — an advisory, an export, a colleague's note. The AI analysis reads it alongside the log evidence."
+        >
+          <input
+            id="incident-attachment"
+            ref={fileRef}
+            type="file"
+            accept={ATTACHMENT_ACCEPT}
+            className="w-full rounded-lg border border-soc-border bg-soc-base px-3 py-2 text-sm text-soc-muted file:mr-3 file:rounded-md file:border-0 file:bg-soc-raised file:px-3 file:py-1 file:text-sm file:text-soc-text"
           />
         </Field>
 

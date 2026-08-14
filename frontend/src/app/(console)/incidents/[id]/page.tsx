@@ -12,6 +12,7 @@
 import Link from "next/link";
 import { use } from "react";
 
+import { AttachmentsPanel } from "@/components/incidents/attachments-panel";
 import { DeleteIncidentButton } from "@/components/incidents/delete-incident";
 import { AnomaliesPanel, LogEvidencePanel } from "@/components/incidents/evidence-panel";
 import { NotesPanel } from "@/components/incidents/notes-panel";
@@ -137,6 +138,7 @@ export default function IncidentDetailPage({
         </div>
 
         <div className="space-y-6">
+          <AttachmentsPanel incidentId={data.id} />
           <NotesPanel incidentId={data.id} notes={data.notes} onChanged={reload} />
         </div>
       </div>

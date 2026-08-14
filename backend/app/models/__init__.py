@@ -26,6 +26,7 @@ from app.models.enums import (
     UserRole,
 )
 from app.models.incident import Incident
+from app.models.incident_attachment import IncidentAttachment
 from app.models.incident_note import IncidentNote
 from app.models.incident_report import IncidentReport
 from app.models.ingestion_job import IngestionJob
@@ -40,6 +41,7 @@ __all__ = [
     "AuditLog",
     "DocumentChunk",
     "Incident",
+    "IncidentAttachment",
     "IncidentNote",
     "IncidentReport",
     "IngestionJob",

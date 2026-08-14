@@ -27,6 +27,7 @@ from app.core.logging import get_logger
 from app.models.anomaly import Anomaly
 from app.models.enums import AttackType, ReportFormat, ReportStatus, Severity
 from app.models.incident import Incident
+from app.models.incident_attachment import IncidentAttachment
 from app.models.incident_report import IncidentReport
 from app.models.log_entry import LogEntry
 from app.schemas.analysis import IncidentAnalysis, analysis_json_schema
@@ -49,6 +50,10 @@ class AnalysisContext:
     anomalies: list[dict[str, Any]]
     log_evidence: list[dict[str, Any]]
     knowledge: list[dict[str, Any]]
+    # Files an analyst attached. Untrusted like everything else here: an
+    # attachment is a document someone uploaded, and its text is as capable of
+    # carrying an injection attempt as a log line is.
+    attachments: list[dict[str, Any]] = field(default_factory=list)
     # What the detectors computed, kept apart from the untrusted views above
     # because it is the platform's own arithmetic rather than log content.
     assessment: dict[str, Any] = field(default_factory=dict)
@@ -59,6 +64,7 @@ class AnalysisContext:
             "anomalies": len(self.anomalies),
             "log_entries": len(self.log_evidence),
             "knowledge_chunks": len(self.knowledge),
+            "attachments": len(self.attachments),
         }
 
 
@@ -106,6 +112,26 @@ def _log_view(entry: LogEntry) -> dict[str, Any]:
         "destination_ip": entry.destination_ip,
         "destination_port": entry.destination_port,
         "message": entry.message,
+    }
+
+
+def _attachment_view(attachment: IncidentAttachment) -> dict[str, Any]:
+    """An attached file as the model sees it.
+
+    The text is cut to its own budget before it reaches the prompt builder, so
+    one long document cannot consume the context that the log evidence needs.
+    The cut is declared rather than hidden: an analysis performed on the first
+    few thousand characters should say so.
+    """
+    body = attachment.content[: settings.ATTACHMENT_PROMPT_CHARS]
+    clipped = attachment.truncated or len(attachment.content) > len(body)
+
+    return {
+        "filename": attachment.filename,
+        "uploaded_by": attachment.uploaded_by_username,
+        "uploaded_at": attachment.created_at,
+        "truncated": clipped,
+        "content": body,
     }
 
 
@@ -188,11 +214,25 @@ async def gather_context(
             for hit in hits
         ]
 
+    # Newest first: when an analyst has attached several files, the most recent
+    # is the one most likely to describe where the investigation has got to.
+    attached = list(
+        (
+            await session.execute(
+                select(IncidentAttachment)
+                .where(IncidentAttachment.incident_id == incident.id)
+                .order_by(IncidentAttachment.created_at.desc())
+                .limit(settings.AI_MAX_ATTACHMENTS)
+            )
+        ).scalars()
+    )
+
     return AnalysisContext(
         incident=_incident_view(incident),
         anomalies=[_anomaly_view(a) for a in anomalies],
         log_evidence=[_log_view(e) for e in entries],
         knowledge=knowledge,
+        attachments=[_attachment_view(a) for a in attached],
         assessment=build_assessment(anomalies),
     )
 
@@ -419,6 +459,7 @@ async def analyze_incident(
         anomalies=context.anomalies,
         log_evidence=context.log_evidence,
         knowledge=context.knowledge,
+        attachments=context.attachments,
         assessment=context.assessment,
     )
 

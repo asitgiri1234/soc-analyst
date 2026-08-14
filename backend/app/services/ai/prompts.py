@@ -181,6 +181,7 @@ def render_case(
     anomalies: list[dict[str, Any]],
     log_evidence: list[dict[str, Any]],
     knowledge: list[dict[str, Any]],
+    attachments: list[dict[str, Any]] | None = None,
     assessment: dict[str, Any] | None = None,
 ) -> str:
     """Assemble the user message from untrusted case data.
@@ -219,6 +220,18 @@ def render_case(
         )
     else:
         sections.append("No log evidence is available for this incident.")
+
+    if attachments:
+        # Inside the fence, exactly like log evidence. An attachment is a file
+        # a person uploaded: its text is as capable of carrying an injection
+        # attempt as a log line, and being analyst-supplied does not make it
+        # trusted -- the analyst did not write it, they forwarded it.
+        sections.append(
+            _block(
+                f"ANALYST ATTACHMENTS ({len(attachments)})",
+                _dump(attachments),
+            )
+        )
 
     if knowledge:
         sections.append(

@@ -130,6 +130,22 @@ class Settings(BaseSettings):
     # not write an unbounded JSON column.
     INGEST_MAX_REPORTED_ERRORS: int = Field(default=100, ge=1, le=1000)
 
+    # --- Incident attachments --------------------------------------------
+    # Analyst-supplied context files. Smaller than the log upload limit: this
+    # is a note with a file attached, not a bulk ingest, and the whole thing is
+    # decoded into memory and stored as text.
+    ATTACHMENT_MAX_BYTES: int = Field(default=2 * 1024 * 1024, ge=1024)
+    # How much of the extracted text is kept. A file longer than this is stored
+    # truncated and flagged, so nobody reads an analysis believing the model
+    # saw the whole document.
+    ATTACHMENT_MAX_TEXT_CHARS: int = Field(default=20_000, ge=100, le=1_000_000)
+    # How much of each attachment reaches the prompt. Bounded separately: the
+    # context window is a shared budget and one long attachment must not crowd
+    # out the log evidence.
+    ATTACHMENT_PROMPT_CHARS: int = Field(default=4_000, ge=100, le=100_000)
+    # Attachments included in one analysis, newest first.
+    AI_MAX_ATTACHMENTS: int = Field(default=5, ge=0, le=50)
+
     # --- AI incident analysis --------------------------------------------
     # The provider is selected here so it can be swapped without touching the
     # analyzer. "groq" is the shipped integration.

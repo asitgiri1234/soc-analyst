@@ -98,6 +98,34 @@ class NoteRead(BaseModel):
     created_at: datetime
 
 
+class AttachmentRead(BaseModel):
+    """An attached file, as it appears on its incident.
+
+    ``content`` is deliberately absent from the list view: attachments are text
+    documents and returning every one in full would make fetching an incident
+    proportional to everything ever attached to it. The body comes back from
+    the single-attachment endpoint.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    incident_id: uuid.UUID
+    uploaded_by_id: uuid.UUID | None
+    uploaded_by_username: str | None
+    filename: str
+    content_type: str | None
+    size_bytes: int
+    truncated: bool
+    created_at: datetime
+
+
+class AttachmentDetail(AttachmentRead):
+    """An attachment with its extracted text."""
+
+    content: str
+
+
 class AnomalyLink(BaseModel):
     """Attach anomalies to an incident."""
 
@@ -160,3 +188,4 @@ class IncidentRead(IncidentSummary):
     context: dict[str, Any]
     anomalies: list[LinkedAnomalyRead]
     notes: list[NoteRead]
+    attachments: list[AttachmentRead]
