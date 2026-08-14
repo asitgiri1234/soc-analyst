@@ -32,6 +32,16 @@ export const canInvestigate = (role: UserRole | undefined) => hasAtLeast(role, "
 export const canGenerateReport = (role: UserRole | undefined) =>
   hasAtLeast(role, "analyst");
 
+/**
+ * Delete an incident. Admin only, matching the endpoint.
+ *
+ * Deletion is the one incident operation reserved for ADMIN: it destroys an
+ * investigation record along with its notes and report history, which is not
+ * something a shift analyst should be able to do by accident.
+ */
+export const canDeleteIncident = (role: UserRole | undefined) =>
+  hasAtLeast(role, "admin");
+
 export const ROLE_LABEL: Record<UserRole, string> = {
   admin: "Administrator",
   analyst: "Analyst",

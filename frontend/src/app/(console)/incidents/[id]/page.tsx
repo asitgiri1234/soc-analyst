@@ -12,6 +12,7 @@
 import Link from "next/link";
 import { use } from "react";
 
+import { DeleteIncidentButton } from "@/components/incidents/delete-incident";
 import { AnomaliesPanel, LogEvidencePanel } from "@/components/incidents/evidence-panel";
 import { NotesPanel } from "@/components/incidents/notes-panel";
 import { ReportPanel } from "@/components/incidents/report-panel";
@@ -19,7 +20,9 @@ import { StatusControl } from "@/components/incidents/status-control";
 import { Tag } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { ErrorState, LoadingState } from "@/components/ui/states";
+import { useAuth } from "@/lib/auth";
 import { formatDateTime, formatRelative, humanise } from "@/lib/format";
+import { canDeleteIncident } from "@/lib/rbac";
 import { useApi } from "@/lib/use-api";
 import type { Incident } from "@/types/api";
 
@@ -31,6 +34,7 @@ export default function IncidentDetailPage({
   // Route params are a promise in Next 16.
   const { id } = use(params);
   const { data, error, loading, forbidden, reload } = useApi<Incident>(`/incidents/${id}`);
+  const { user } = useAuth();
 
   if (loading) {
     return (
@@ -86,7 +90,10 @@ export default function IncidentDetailPage({
           </p>
         </div>
 
-        <StatusControl incident={data} onChanged={reload} />
+        <div className="flex flex-col items-end gap-2">
+          <StatusControl incident={data} onChanged={reload} />
+          {canDeleteIncident(user?.role) && <DeleteIncidentButton incident={data} />}
+        </div>
       </header>
 
       <div className="grid gap-6 xl:grid-cols-3">
