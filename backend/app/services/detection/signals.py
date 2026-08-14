@@ -77,6 +77,56 @@ def actor(entry: LogEntry) -> str | None:
     return entry.username or None
 
 
+# Phrases that name the account as unknown to the system. These are matched
+# against the message as well as the structured fields, unlike the generic
+# failure markers: they are specific enough that a false positive is unlikely,
+# and the distinction they draw is worth a lot. A real user mistyping their
+# password produces failures against an account that *exists*; attempts against
+# accounts that do not exist are someone working through a list of guesses.
+INVALID_USER_MARKERS = (
+    "invalid user",
+    "invalid_user",
+    "unknown user",
+    "unknown_user",
+    "no such user",
+    "nonexistent user",
+    "user unknown",
+    "illegal user",
+    "authentication failure for illegal user",
+    "user does not exist",
+)
+
+# A service reporting that it is throttling or penalising the client. OpenSSH
+# emits "penalty: failed authentication"; other daemons report throttling or
+# tarpitting. The service has itself concluded the traffic is abusive.
+PENALTY_MARKERS = (
+    "penalty",
+    "throttl",
+    "tarpit",
+    "rate limit",
+    "rate-limit",
+    "too many authentication failures",
+    "maximum authentication attempts",
+    "max authentication attempts",
+)
+
+
+def is_invalid_user(entry: LogEntry) -> bool:
+    """Whether the entry records an attempt against an account that does not exist."""
+    return _contains(_haystack(entry, include_message=True), INVALID_USER_MARKERS)
+
+
+def has_auth_penalty(entry: LogEntry) -> bool:
+    """Whether the service reported throttling or penalising this client.
+
+    Only counted on an authentication event: "rate limit" in a firewall log is
+    a different statement about different traffic.
+    """
+    if not is_auth_event(entry) and not is_failure(entry):
+        return False
+    return _contains(_haystack(entry, include_message=True), PENALTY_MARKERS)
+
+
 def sample_ids(entries: Iterable[LogEntry], limit: int = 10) -> list[str]:
     """Entry ids an analyst can pull up to check a finding.
 

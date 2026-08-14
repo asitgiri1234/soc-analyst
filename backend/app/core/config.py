@@ -205,6 +205,39 @@ class Settings(BaseSettings):
     # Detectors hold their input in memory, so the window has to be bounded.
     DETECTION_MAX_ENTRIES: int = Field(default=50_000, ge=100, le=1_000_000)
 
+    # --- Brute-force scoring ---------------------------------------------
+    # Failures from one source against one account. The count alone is a weak
+    # signal -- ten failures over a working day is a forgetful user, ten in
+    # five seconds is a script -- so the count sets a floor and the
+    # corroborating signals below raise it.
+    BRUTE_FORCE_ATTEMPT_THRESHOLD: int = Field(default=5, ge=2, le=1000)
+    BRUTE_FORCE_ATTEMPT_SATURATION: int = Field(default=30, ge=3, le=10_000)
+
+    # Attempts per minute at or above which the burst is machine-driven. A
+    # person retyping a password manages a handful a minute at most.
+    BRUTE_FORCE_MACHINE_RATE_PER_MINUTE: float = Field(default=12.0, gt=0, le=10_000)
+
+    # How much each corroborating signal may add to the count-based score.
+    # Sum deliberately exceeds 1.0: any two strong signals should be able to
+    # carry a modest count to CRITICAL, which is the case that was being
+    # under-reported.
+    BRUTE_FORCE_RATE_WEIGHT: float = Field(default=0.25, ge=0.0, le=1.0)
+    BRUTE_FORCE_INVALID_USER_WEIGHT: float = Field(default=0.20, ge=0.0, le=1.0)
+    BRUTE_FORCE_PENALTY_WEIGHT: float = Field(default=0.10, ge=0.0, le=1.0)
+    # A source that failed repeatedly and then succeeded may hold a working
+    # credential; that is the most serious shape this detector sees.
+    BRUTE_FORCE_SUCCESS_WEIGHT: float = Field(default=0.25, ge=0.0, le=1.0)
+
+    # Distinct accounts one source failed against (password spraying).
+    BRUTE_FORCE_SPRAY_ACCOUNT_THRESHOLD: int = Field(default=5, ge=2, le=1000)
+    BRUTE_FORCE_SPRAY_ACCOUNT_SATURATION: int = Field(default=25, ge=3, le=10_000)
+
+    # --- AI severity reconciliation --------------------------------------
+    # The detectors' severity is arithmetic over counted evidence; the model's
+    # is a judgement. When the model rates an incident *lower* than the
+    # detectors without saying why, the arithmetic wins.
+    AI_ENFORCE_DETERMINISTIC_SEVERITY: bool = True
+
     # --- PostgreSQL / pgvector ------------------------------------------
     POSTGRES_HOST: str = "localhost"
     POSTGRES_PORT: int = 5432

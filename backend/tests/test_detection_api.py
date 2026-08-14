@@ -169,7 +169,10 @@ async def test_a_persisted_anomaly_carries_its_explanation(
     assert anomaly.evidence["threshold"] == 5
     assert anomaly.evidence["sample_log_entry_ids"]
     assert anomaly.features["failed_attempts"] == 25
-    assert anomaly.detector_version == "1.0"
+    # Bumped when the brute-force scoring stopped being a function of the
+    # attempt count alone. The version is stored on every anomaly precisely so
+    # a finding can be traced to the logic that produced it.
+    assert anomaly.detector_version == "2.0"
     assert anomaly.fingerprint
 
 

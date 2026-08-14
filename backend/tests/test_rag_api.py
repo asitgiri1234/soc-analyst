@@ -326,12 +326,21 @@ async def test_an_empty_query_is_rejected(client: httpx.AsyncClient, headers) ->
     assert response.status_code == 422
 
 
-async def test_search_on_an_empty_corpus_returns_nothing(
+async def test_search_returning_no_match_is_empty_not_an_error(
     client: httpx.AsyncClient, headers
 ) -> None:
+    """A query nothing satisfies returns an empty result, not a 404 or a throw.
+
+    Expressed as a similarity floor no chunk can clear rather than as "the
+    corpus is empty". Documents committed by a seed run are visible to this
+    transaction, and any real deployment has a populated corpus, so a test that
+    depends on the table being globally empty passes only on a virgin database.
+    """
     body = (
         await client.post(
-            f"{KNOWLEDGE}/search", headers=headers, json={"query": "anything at all"}
+            f"{KNOWLEDGE}/search",
+            headers=headers,
+            json={"query": "anything at all", "min_similarity": 0.999999},
         )
     ).json()
     assert body["count"] == 0
@@ -598,7 +607,10 @@ async def test_each_seed_document_is_retrievable_by_its_topic(
         response = await client.post(
             f"{KNOWLEDGE}/documents", headers=headers, json=payload
         )
-        assert response.status_code == 201, response.text
+        # 409 when a seed run has already committed this document. Either way
+        # it is in the corpus, which is all this test needs; asserting on 201
+        # would make the test depend on the database never having been seeded.
+        assert response.status_code in {201, 409}, response.text
 
     expected = json.loads((SEED_DIR / filename).read_text(encoding="utf-8"))["title"]
     body = (

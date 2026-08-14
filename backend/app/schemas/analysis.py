@@ -68,6 +68,12 @@ class IncidentAnalysis(BaseModel):
     # in the model. Recorded so a low-confidence report can be flagged for
     # closer human review rather than read as settled fact.
     confidence: float = Field(ge=0.0, le=1.0)
+    # Set only when the model rates the incident *below* the detectors'
+    # arithmetic. The detectors counted evidence; the model formed a judgement,
+    # and a judgement that contradicts the count has to be argued rather than
+    # asserted. Left null, an unexplained downgrade is not applied -- see
+    # `app.services.ai.analyzer.reconcile_severity`.
+    severity_override_reason: str | None = Field(default=None, max_length=2000)
 
     @field_validator("attack_type", mode="before")
     @classmethod

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
@@ -49,6 +49,9 @@ class AnalysisContext:
     anomalies: list[dict[str, Any]]
     log_evidence: list[dict[str, Any]]
     knowledge: list[dict[str, Any]]
+    # What the detectors computed, kept apart from the untrusted views above
+    # because it is the platform's own arithmetic rather than log content.
+    assessment: dict[str, Any] = field(default_factory=dict)
 
     @property
     def counts(self) -> dict[str, int]:
@@ -190,6 +193,128 @@ async def gather_context(
         anomalies=[_anomaly_view(a) for a in anomalies],
         log_evidence=[_log_view(e) for e in entries],
         knowledge=knowledge,
+        assessment=build_assessment(anomalies),
+    )
+
+
+# Severity order, lowest first. Used to compare the model's judgement with the
+# detectors' arithmetic.
+_SEVERITY_RANK: dict[Severity, int] = {
+    Severity.INFO: 0,
+    Severity.LOW: 1,
+    Severity.MEDIUM: 2,
+    Severity.HIGH: 3,
+    Severity.CRITICAL: 4,
+}
+
+
+def build_assessment(anomalies: list[Anomaly]) -> dict[str, Any]:
+    """Summarise what the detectors concluded, for the model to work from.
+
+    The incident takes the *highest* severity among its anomalies rather than an
+    average: an incident containing one critical detection is a critical
+    incident, and averaging it against two low ones would report a calmer
+    situation than the evidence supports.
+
+    Only computed values travel -- scores, counts, signal names. Titles and
+    messages stay in the untrusted section where they belong.
+    """
+    if not anomalies:
+        return {}
+
+    top = max(anomalies, key=lambda anomaly: anomaly.score)
+    corroborating: set[str] = set()
+    metrics: dict[str, Any] = {}
+
+    for anomaly in anomalies:
+        evidence = anomaly.evidence or {}
+        for name in evidence.get("corroborating_signals") or []:
+            corroborating.add(str(name))
+
+    # Carried from the strongest detection, since that is the one setting the
+    # severity the model is being asked to respect.
+    for key in (
+        "failed_attempts",
+        "attempts_per_minute",
+        "invalid_user_attempts",
+        "service_penalties",
+        "successful_after_failures",
+        "distinct_accounts",
+    ):
+        value = (top.evidence or {}).get(key)
+        if value is not None:
+            metrics[key] = value
+
+    confidences = [a.confidence for a in anomalies if a.confidence is not None]
+
+    return {
+        "severity": top.severity.value,
+        "score": top.score,
+        "confidence": max(confidences) if confidences else 0.0,
+        "anomaly_count": len(anomalies),
+        "corroborating_signals": sorted(corroborating),
+        "metrics": metrics,
+    }
+
+
+def reconcile_severity(
+    analysis: IncidentAnalysis, assessment: dict[str, Any]
+) -> tuple[IncidentAnalysis, dict[str, Any]]:
+    """Hold the model to the detectors' severity unless it argues otherwise.
+
+    The detectors counted evidence; the model formed a judgement. A judgement
+    that rates an incident *below* the arithmetic may be right -- a known
+    scanner, a test harness, a misconfigured client -- but it has to say so.
+    Left unexplained, the count wins, because the failure being corrected here
+    is exactly that: an obvious brute-force burst quietly rated MEDIUM.
+
+    Raising severity is never blocked. The model sees context the detectors do
+    not, and erring upward is the safe direction in a SOC.
+    """
+    note: dict[str, Any] = {"severity_adjusted": False}
+
+    computed = assessment.get("severity")
+    if not computed or not settings.AI_ENFORCE_DETERMINISTIC_SEVERITY:
+        return analysis, note
+
+    floor = Severity(computed)
+    if _SEVERITY_RANK[analysis.severity] >= _SEVERITY_RANK[floor]:
+        return analysis, note
+
+    if analysis.severity_override_reason:
+        # Argued for, so it stands -- and the argument is recorded.
+        note["severity_downgrade_accepted"] = {
+            "from": floor.value,
+            "to": analysis.severity.value,
+            "reason": analysis.severity_override_reason,
+        }
+        return analysis, note
+
+    logger.warning(
+        "model rated incident %s below the computed %s without justification; "
+        "keeping the computed severity",
+        analysis.severity.value,
+        floor.value,
+    )
+    note = {
+        "severity_adjusted": True,
+        "model_severity": analysis.severity.value,
+        "enforced_severity": floor.value,
+        "reason": "computed severity kept: the model gave no justification for a downgrade",
+    }
+    # Confidence is about the evidence, and the detectors' corroboration is
+    # part of that evidence. A model that misjudged the severity should not
+    # also be trusted to have judged its own certainty well, so the stronger of
+    # the two is taken.
+    detector_confidence = float(assessment.get("confidence") or 0.0)
+    return (
+        analysis.model_copy(
+            update={
+                "severity": floor,
+                "confidence": max(analysis.confidence, detector_confidence),
+            }
+        ),
+        note,
     )
 
 
@@ -294,12 +419,15 @@ async def analyze_incident(
         anomalies=context.anomalies,
         log_evidence=context.log_evidence,
         knowledge=context.knowledge,
+        assessment=context.assessment,
     )
 
     completion = await provider.complete(
         system=system, user=user, json_schema=analysis_json_schema()
     )
     analysis = parse_analysis(completion.text)
+    # The detectors' severity stands unless the model argued for lowering it.
+    analysis, severity_note = reconcile_severity(analysis, context.assessment)
 
     next_version = (
         await session.execute(
@@ -335,6 +463,11 @@ async def analyze_incident(
             "usage": completion.usage,
             "context": context.counts,
             "knowledge_used": include_knowledge,
+            # What the detectors computed, and whether the model's severity was
+            # kept or overridden. Recorded so a report can be audited against
+            # the arithmetic it was supposed to respect.
+            "assessment": context.assessment,
+            "severity_reconciliation": severity_note,
             "generated_at": datetime.now(UTC).isoformat(),
         },
         published_at=datetime.now(UTC) if publish else None,
@@ -357,7 +490,9 @@ __all__ = [
     "AnalysisContext",
     "LLMError",
     "analyze_incident",
+    "build_assessment",
     "gather_context",
     "parse_analysis",
+    "reconcile_severity",
     "render_markdown",
 ]
