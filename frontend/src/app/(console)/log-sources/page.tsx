@@ -9,11 +9,17 @@
  * a stale source is called out rather than shown as merely "active".
  */
 
+import { useState } from "react";
+
 import { PageHeader } from "@/components/layout/app-shell";
+import { AddSourceModal, UploadModal } from "@/components/log-sources/ingest-panel";
 import { SourceStatusBadge, Tag } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
+import { PrimaryButton, SecondaryButton } from "@/components/ui/modal";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui/states";
+import { useAuth } from "@/lib/auth";
 import { formatDateTime, formatNumber, formatRelative, humanise } from "@/lib/format";
+import { canInvestigate } from "@/lib/rbac";
 import { useApi } from "@/lib/use-api";
 import type { LogSource } from "@/types/api";
 
@@ -29,6 +35,11 @@ function isStale(source: LogSource): boolean {
 export default function LogSourcesPage() {
   const { data, error, loading, forbidden, reload } =
     useApi<LogSource[]>("/log-sources?limit=100");
+  const { user } = useAuth();
+  const mayIngest = canInvestigate(user?.role);
+
+  const [addOpen, setAddOpen] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
 
   const stale = data?.filter(isStale) ?? [];
 
@@ -37,6 +48,30 @@ export default function LogSourcesPage() {
       <PageHeader
         title="Log sources"
         description="Collectors feeding the detection pipeline."
+        actions={
+          mayIngest && (
+            <div className="flex gap-2">
+              <SecondaryButton onClick={() => setAddOpen(true)}>
+                Add source
+              </SecondaryButton>
+              <PrimaryButton onClick={() => setUploadOpen(true)}>
+                Upload logs
+              </PrimaryButton>
+            </div>
+          )
+        }
+      />
+
+      <AddSourceModal
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        onCreated={reload}
+      />
+      <UploadModal
+        open={uploadOpen}
+        sources={data ?? []}
+        onClose={() => setUploadOpen(false)}
+        onIngested={reload}
       />
 
       {stale.length > 0 && (
@@ -63,6 +98,13 @@ export default function LogSourcesPage() {
           <EmptyState
             title="No log sources"
             description="Register a source and upload a CSV or JSON log file to start ingesting events."
+            action={
+              mayIngest && (
+                <PrimaryButton onClick={() => setAddOpen(true)}>
+                  Register a source
+                </PrimaryButton>
+              )
+            }
           />
         )}
 

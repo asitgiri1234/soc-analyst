@@ -233,6 +233,69 @@ export interface IncidentReport {
   created_at: string;
 }
 
+export type IngestionStatus =
+  | "pending"
+  | "running"
+  | "completed"
+  | "partial"
+  | "failed";
+
+/** One rejected record, located by its line in the uploaded file. */
+export interface RowError {
+  line: number;
+  field: string | null;
+  reason: string;
+}
+
+export interface IngestionJob {
+  id: string;
+  log_source_id: string;
+  filename: string;
+  content_type: string | null;
+  size_bytes: number;
+  format: string;
+  status: IngestionStatus;
+  total_records: number;
+  accepted_records: number;
+  rejected_records: number;
+  errors: RowError[];
+  error_detail: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  created_at: string;
+}
+
+/** Counts describing one detection run. */
+export interface AnalysisSummary {
+  entries_analysed: number;
+  findings: number;
+  persisted: number;
+  duplicates_skipped: number;
+  by_severity: Record<string, number>;
+  truncated: boolean;
+}
+
+export interface Finding {
+  detector: string;
+  detector_version: string;
+  anomaly_type: AnomalyType;
+  severity: Severity;
+  score: number;
+  title: string;
+  reason: string;
+  log_entry_id: string | null;
+}
+
+export interface AnalyzeResponse {
+  window_start: string;
+  window_end: string;
+  log_source_id: string | null;
+  detectors_run: string[];
+  summary: AnalysisSummary;
+  findings: Finding[];
+  anomalies: Anomaly[];
+}
+
 export interface CountByKey {
   key: string;
   count: number;

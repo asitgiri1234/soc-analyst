@@ -68,8 +68,15 @@ interface RequestOptions extends Omit<RequestInit, "body"> {
 export async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { body, authenticated = true, headers, ...rest } = options;
 
+  // FormData sets its own Content-Type, including the multipart boundary the
+  // server needs to split the parts. Setting the header by hand would replace
+  // it with a boundary-less value and the upload would fail to parse.
+  const isFormData = body instanceof FormData;
+
   const requestHeaders = new Headers(headers);
-  if (body !== undefined) requestHeaders.set("Content-Type", "application/json");
+  if (body !== undefined && !isFormData) {
+    requestHeaders.set("Content-Type", "application/json");
+  }
 
   if (authenticated) {
     const token = getToken();
@@ -81,7 +88,12 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
     response = await fetch(apiUrl(path), {
       ...rest,
       headers: requestHeaders,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body:
+        body === undefined
+          ? undefined
+          : isFormData
+            ? (body as FormData)
+            : JSON.stringify(body),
     });
   } catch {
     // A network-level failure has no status; 0 distinguishes it from any

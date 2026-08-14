@@ -12,12 +12,16 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { RaiseIncidentModal } from "@/components/anomalies/detection-actions";
 import { PageHeader } from "@/components/layout/app-shell";
 import { IncidentStatusBadge, SeverityBadge, Tag } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { PrimaryButton } from "@/components/ui/modal";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui/states";
 import { formatDateTime, formatRelative, humanise } from "@/lib/format";
 import { query } from "@/lib/api-client";
+import { useAuth } from "@/lib/auth";
+import { canInvestigate } from "@/lib/rbac";
 import { useApi } from "@/lib/use-api";
 import type { IncidentStatus, IncidentSummary, Severity } from "@/types/api";
 
@@ -54,11 +58,34 @@ export default function IncidentsPage() {
     };
   }
 
+  const { user } = useAuth();
+  const mayInvestigate = canInvestigate(user?.role);
+  const [createOpen, setCreateOpen] = useState(false);
+
   return (
     <>
       <PageHeader
         title="Incidents"
         description="Investigations raised from detected anomalies."
+        actions={
+          mayInvestigate && (
+            <PrimaryButton onClick={() => setCreateOpen(true)}>
+              New incident
+            </PrimaryButton>
+          )
+        }
+      />
+
+      {/*
+        The same dialog the anomalies page uses, with nothing selected: an
+        incident can be opened before its evidence is known, and anomalies are
+        linked afterwards from the anomaly list.
+      */}
+      <RaiseIncidentModal
+        open={createOpen}
+        anomalyIds={[]}
+        suggestedTitle="New investigation"
+        onClose={() => setCreateOpen(false)}
       />
 
       <div className="mb-4 flex flex-wrap items-center gap-3">

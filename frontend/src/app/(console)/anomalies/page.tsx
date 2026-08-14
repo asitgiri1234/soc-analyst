@@ -10,12 +10,19 @@
 
 import { useState } from "react";
 
+import {
+  RaiseIncidentModal,
+  RunDetectionButton,
+} from "@/components/anomalies/detection-actions";
 import { AnomalyStatusBadge, SeverityBadge, Tag } from "@/components/ui/badge";
 import { PageHeader } from "@/components/layout/app-shell";
 import { Card } from "@/components/ui/card";
+import { PrimaryButton } from "@/components/ui/modal";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui/states";
 import { query } from "@/lib/api-client";
+import { useAuth } from "@/lib/auth";
 import { formatDateTime, formatRelative, humanise } from "@/lib/format";
+import { canInvestigate } from "@/lib/rbac";
 import { useApi } from "@/lib/use-api";
 import type { Anomaly, AnomalyStatus, Severity } from "@/types/api";
 
@@ -49,11 +56,57 @@ export default function AnomaliesPage() {
   const { data, error, loading, forbidden, reload } = useApi<Anomaly[]>(path);
   const hasNextPage = (data?.length ?? 0) === PAGE_SIZE;
 
+  const { user } = useAuth();
+  const mayInvestigate = canInvestigate(user?.role);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [raiseOpen, setRaiseOpen] = useState(false);
+
+  function toggle(id: string) {
+    setSelected((current) =>
+      current.includes(id) ? current.filter((value) => value !== id) : [...current, id],
+    );
+  }
+
+  // The highest-scoring selected detection names the incident, since that is
+  // the one an analyst would lead the write-up with.
+  const suggestedTitle =
+    data
+      ?.filter((anomaly) => selected.includes(anomaly.id))
+      .sort((a, b) => b.score - a.score)[0]?.title ?? "New investigation";
+
   return (
     <>
       <PageHeader
         title="Anomalies"
         description="Detections raised by the rule and statistical engines."
+        actions={mayInvestigate && <RunDetectionButton onComplete={reload} />}
+      />
+
+      {mayInvestigate && selected.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-sky-500/40 bg-sky-500/10 px-4 py-3">
+          <p className="text-sm text-sky-200">
+            {selected.length} anomal{selected.length === 1 ? "y" : "ies"} selected
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setSelected([])}
+              className="text-sm text-soc-muted hover:text-soc-text"
+            >
+              Clear
+            </button>
+            <PrimaryButton onClick={() => setRaiseOpen(true)}>
+              Raise incident
+            </PrimaryButton>
+          </div>
+        </div>
+      )}
+
+      <RaiseIncidentModal
+        open={raiseOpen}
+        anomalyIds={selected}
+        suggestedTitle={suggestedTitle}
+        onClose={() => setRaiseOpen(false)}
       />
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -118,6 +171,25 @@ export default function AnomaliesPage() {
           <ul className="divide-y divide-soc-border">
             {data.map((anomaly) => (
               <li key={anomaly.id}>
+                {/*
+                  The checkbox sits beside the expand control rather than
+                  inside it: a control nested in a button is invalid, and
+                  ticking a row for triage should not also expand it. The
+                  expanded panel is a sibling of this row, not of the button,
+                  so it spans the full width underneath.
+                */}
+                <div className="flex items-start">
+                {mayInvestigate && (
+                  <label className="flex cursor-pointer items-center self-stretch pl-5">
+                    <span className="sr-only">Select {anomaly.title}</span>
+                    <input
+                      type="checkbox"
+                      checked={selected.includes(anomaly.id)}
+                      onChange={() => toggle(anomaly.id)}
+                      className="h-4 w-4 accent-sky-500"
+                    />
+                  </label>
+                )}
                 <button
                   type="button"
                   onClick={() =>
@@ -144,6 +216,7 @@ export default function AnomaliesPage() {
                     <AnomalyStatusBadge status={anomaly.status} />
                   </div>
                 </button>
+                </div>
 
                 {expanded === anomaly.id && (
                   <div className="space-y-3 border-t border-soc-border bg-soc-base px-5 py-4">
